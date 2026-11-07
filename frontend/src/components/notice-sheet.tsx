@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { CircleAlert, Flag, MessageSquare } from 'lucide-react'
+import { CircleAlert, FileText, Flag, MessageSquare } from 'lucide-react'
 import { useMemo, type ReactNode } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -11,6 +11,7 @@ import { formatDate, formatDateTime } from '@/lib/format'
 import { errorText, riskModelQuery, riskNoticeQuery } from '@/lib/queries'
 import { cn } from '@/lib/utils'
 import { HazardInventory } from './hazard-inventory'
+import { NoticeDraft } from './notice-draft'
 import { TermHint } from './term-hint'
 import { OutcomeBadge } from './outcome-badge'
 import { ChartLegend, RiskChart, type ChartCriterion, type ChartCurve, type ChartWorstCase } from './risk-chart'
@@ -256,6 +257,8 @@ type NoticeSheetProps = {
   onChatOpenChange: (open: boolean) => void
   /** Rendered as a column beside the details while `chatOpen`. */
   chat: ReactNode
+  draftOpen: boolean
+  onDraftOpenChange: (open: boolean) => void
 }
 
 export function NoticeSheet({
@@ -267,6 +270,8 @@ export function NoticeSheet({
   chatOpen,
   onChatOpenChange,
   chat,
+  draftOpen,
+  onDraftOpenChange,
 }: NoticeSheetProps) {
   const notice = useQuery({ ...riskNoticeQuery(ificNo, ntcId ?? 0, asOf, assessedAt), enabled: ntcId != null })
   const model = useQuery(riskModelQuery)
@@ -283,6 +288,14 @@ export function NoticeSheet({
       >
         <SheetHeader className="gap-2 pr-12">
           <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button
+              variant={draftOpen ? 'secondary' : 'outline'}
+              size="sm"
+              aria-pressed={draftOpen}
+              onClick={() => onDraftOpenChange(!draftOpen)}
+            >
+              <FileText aria-hidden /> Draft letter
+            </Button>
             <Button
               variant={chatOpen ? 'secondary' : 'outline'}
               size="sm"
@@ -333,7 +346,27 @@ export function NoticeSheet({
                 </Alert>
               </div>
             ) : (
-              detail && <NoticeBody detail={detail} outcomeSensitive={outcomeSensitive} />
+              detail && (
+                <>
+                  {draftOpen && (
+                    <div className="px-4 pb-6">
+                      <Section
+                        title="Draft letter"
+                        description="A letter to the notifying administration, built from the stored results for an expert to review and edit. Nothing is stored or sent."
+                      >
+                        <NoticeDraft
+                          key={`${detail.ntc_id}:${asOf}`}
+                          ificNo={ificNo}
+                          ntcId={detail.ntc_id}
+                          asOf={asOf}
+                          assessedAt={assessedAt}
+                        />
+                      </Section>
+                    </div>
+                  )}
+                  <NoticeBody detail={detail} outcomeSensitive={outcomeSensitive} />
+                </>
+              )
             )}
           </div>
         </div>

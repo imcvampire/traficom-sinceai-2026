@@ -239,3 +239,50 @@ class ChatStatusOut(BaseModel):
     enabled: bool
     model: str | None
     reason: str | None
+
+
+DraftKindOut = Literal["comment_9_52", "inclusion_9_41", "comment_9_3", "enquiry"]
+
+
+class DraftAnnexRowOut(BaseModel):
+    source: str
+    hazard_id: str
+    reading: Literal["exceeds", "main_beam", "near_limit"]
+    service_label: str | None
+    bands_hz: list[tuple[float, float]]
+    share_violating: float | None
+    worst_p95_db: float | None
+    worst_case_db: float | None
+    metric: str | None
+    level_db: float | None
+    time_pct: float | None
+    cite: str | None
+
+
+class DraftOut(BaseModel):
+    kind: DraftKindOut
+    ific_no: int
+    ntc_id: int
+    sat_name: str | None
+    adm: str
+    adm_name: str | None
+    stage: str
+    provision: str
+    d_wic: str | None
+    window_end: str | None
+    days_left: int | None
+    fin_identified: bool
+    br_provisions: list[str]
+    annex: list[DraftAnnexRowOut]
+    warnings: list[str]
+    reviewer_notes: list[str]
+    prose_paragraphs: list[str]
+    model_version: str
+    as_of: str
+    letter_md: str
+
+
+class DraftPolishOut(BaseModel):
+    letter_md: str
+    polished: bool
+    model: str

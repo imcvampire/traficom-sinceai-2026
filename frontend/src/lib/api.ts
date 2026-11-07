@@ -47,22 +47,27 @@ export type WatcherFile = {
 
 export class ApiError extends Error {
   readonly status: number
+  /** The parsed JSON error body, for routes that return more than `detail`. */
+  readonly body: unknown
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, body?: unknown) {
     super(message)
     this.status = status
+    this.body = body
   }
 }
 
 async function errorFrom(res: Response): Promise<ApiError> {
   let detail = `HTTP ${res.status}`
+  let body: unknown
   try {
-    const body = (await res.json()) as { detail?: unknown }
-    if (typeof body.detail === 'string') detail = body.detail
+    body = await res.json()
+    const text = (body as { detail?: unknown }).detail
+    if (typeof text === 'string') detail = text
   } catch {
     // non-JSON error body; keep the status text
   }
-  return new ApiError(res.status, detail)
+  return new ApiError(res.status, detail, body)
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -268,6 +273,60 @@ export const getRiskNotice = (ificNo: number, ntcId: number, asOf: string) =>
   request<NoticeDetail>(`/api/risk/issues/${ificNo}/notices/${ntcId}${query({ as_of: asOf })}`)
 
 export const getRiskModel = () => request<ModelOut>('/api/risk/model')
+
+// Mirrors DraftOut, DraftAnnexRowOut and DraftPolishOut in backend/src/ific/riia/schemas.py.
+export type DraftKind = 'comment_9_52' | 'inclusion_9_41' | 'comment_9_3' | 'enquiry'
+export type DraftReading = 'exceeds' | 'main_beam' | 'near_limit'
+
+export type DraftAnnexRow = {
+  source: string
+  hazard_id: string
+  reading: DraftReading
+  service_label: string | null
+  bands_hz: [number, number][]
+  share_violating: number | null
+  worst_p95_db: number | null
+  worst_case_db: number | null
+  metric: string | null
+  level_db: number | null
+  time_pct: number | null
+  cite: string | null
+}
+
+export type Draft = {
+  kind: DraftKind
+  ific_no: number
+  ntc_id: number
+  sat_name: string | null
+  adm: string
+  adm_name: string | null
+  stage: Stage
+  provision: string
+  d_wic: string | null
+  window_end: string | null
+  days_left: number | null
+  fin_identified: boolean
+  br_provisions: string[]
+  annex: DraftAnnexRow[]
+  warnings: string[]
+  reviewer_notes: string[]
+  prose_paragraphs: string[]
+  model_version: string
+  as_of: string
+  letter_md: string
+}
+
+export type DraftPolish = { letter_md: string; polished: boolean; model: string }
+/** 422 body of a rejected polish: the protected tokens the rewrite dropped or introduced. */
+export type DraftPolishRejection = { detail: string; missing: string[]; added: string[] }
+
+const draftPath = (ificNo: number, ntcId: number) => `/api/risk/issues/${ificNo}/notices/${ntcId}/draft`
+
+export const getDraft = (ificNo: number, ntcId: number, asOf: string) =>
+  request<Draft>(`${draftPath(ificNo, ntcId)}${query({ as_of: asOf })}`)
+
+export const polishDraft = (ificNo: number, ntcId: number, asOf: string) =>
+  request<DraftPolish>(`${draftPath(ificNo, ntcId)}/polish${query({ as_of: asOf })}`, { method: 'POST' })
 
 export type ChatMessage = { role: 'user' | 'assistant'; content: string }
 export type ChatRequest = {

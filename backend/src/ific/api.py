@@ -4,7 +4,7 @@ import logging
 import time
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, suppress
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import date, datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -14,14 +14,14 @@ import httpx2
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from starlette.types import Receive, Scope, Send
 
 from ific import __version__, db, ingest, m4, special_interest, stations
 from ific.config import PROJECT_ROOT, settings
 from ific.llm import ChatClient, LlmError, Usage, make_chat_client
-from ific.riia import MODEL_VERSION, chat, method
+from ific.riia import MODEL_VERSION, chat, draft, method
 from ific.riia import store as risk_store
 from ific.riia.jobs import JobRunner
 from ific.riia.receivers import GenericM4Population
@@ -29,6 +29,8 @@ from ific.riia.schemas import (
     AcceptedOut,
     ChatIn,
     ChatStatusOut,
+    DraftOut,
+    DraftPolishOut,
     IssueOut,
     JobOut,
     ModelOut,
@@ -39,6 +41,7 @@ from ific.watcher.service import WatcherService, WatcherState
 from ific.watcher.store import FileStatus, RunRow
 
 chat_log = logging.getLogger("ific.chat")
+draft_log = logging.getLogger("ific.draft")
 
 
 @asynccontextmanager
@@ -324,6 +327,22 @@ def risk_notice(ific_no: int, ntc_id: int, con: Db, jobs: Jobs, as_of: AsOf = No
     return NoticeDetailOut(**notice)
 
 
+def _build_draft(con: duckdb.DuckDBPyConnection, ific_no: int, ntc_id: int, as_of: date) -> draft.Draft:
+    out = draft.build_draft(con, ific_no, ntc_id, as_of)
+    if out is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, f"notice {ntc_id} of IFIC {ific_no} has not been assessed"
+        )
+    if isinstance(out, draft.NoConcern):
+        raise HTTPException(status.HTTP_409_CONFLICT, f"no concern to describe: {out.reason}")
+    return out
+
+
+@app.get("/api/risk/issues/{ific_no}/notices/{ntc_id}/draft")
+def risk_draft(ific_no: int, ntc_id: int, con: Db, as_of: AsOf = None) -> DraftOut:
+    return DraftOut.model_validate(asdict(_build_draft(con, ific_no, ntc_id, as_of or date.today())))
+
+
 @app.get("/api/risk/model")
 def risk_model(con: Db, jobs: Jobs) -> ModelOut:
     return ModelOut(**method.describe(sorted(risk_store.sensitive_assumptions(con, None, jobs.source))))
@@ -457,3 +476,55 @@ async def risk_chat(
         client.release()
         raise
     return _ChatStream(client, upstream, turn)
+
+
+@app.post("/api/risk/issues/{ific_no}/notices/{ntc_id}/draft/polish", response_model=DraftPolishOut)
+async def risk_draft_polish(
+    ific_no: int, ntc_id: int, con: Db, client: Chat, as_of: AsOf = None
+) -> DraftPolishOut | JSONResponse:
+    """Rewrite the prose paragraphs of the server-built draft; the header, annex and banner never change."""
+    if client is None:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, f"polish is disabled: {_chat_disabled_reason()}"
+        )
+    if not client.try_acquire():
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "an LLM answer is already being generated")
+    started, outcome, tokens = time.monotonic(), "error", None
+    try:
+        d = await run_in_threadpool(_build_draft, con, ific_no, ntc_id, as_of or date.today())
+        tokens = len(draft.protected_tokens("\n\n".join(d.prose_paragraphs), d.adm))
+        try:
+            upstream = await client.open(draft.polish_messages(d))
+            try:
+                text = "".join([item async for item in client.deltas(upstream) if isinstance(item, str)])
+            finally:
+                await upstream.aclose()
+        except LlmError as e:
+            outcome = "upstream_error"
+            draft_log.warning("polish ific_no=%s ntc_id=%s upstream status=%s", ific_no, ntc_id, e.status)
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"LLM provider error: {e.detail}") from e
+        check = draft.check_polish(d, text)
+        if check.paragraphs is None:
+            outcome = "rejected"
+            return JSONResponse(
+                {
+                    "detail": f"polish rejected, the template text is kept: {check.reason}",
+                    "missing": check.missing,
+                    "added": check.added,
+                },
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+            )
+        outcome = "ok"
+        return DraftPolishOut(
+            letter_md=draft.render_letter(d, check.paragraphs), polished=True, model=client.model
+        )
+    finally:
+        client.release()
+        draft_log.info(
+            "polish ific_no=%s ntc_id=%s protected_tokens=%s elapsed_s=%.1f outcome=%s",
+            ific_no,
+            ntc_id,
+            tokens,
+            time.monotonic() - started,
+            outcome,
+        )

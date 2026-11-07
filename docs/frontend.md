@@ -42,6 +42,7 @@ and never shows a composite score. All state is in the URL, and invalid values a
 | `compare` | Comma-separated `ntc_id` list for the compare view |
 | `as_of` | `YYYY-MM-DD` evaluation date for the regulatory context; omitted means today |
 | `chat` | `true`: opens the chat panel. Its scope is the open notice (`ntc`), else the notices the table shows after filters and search. Closing the notice sheet clears it |
+| `draft` | `true`: shows the **Draft letter** section of the open notice (`ntc`); the draft is only fetched while it is set. Closing the notice sheet clears it |
 
 The **Work queue** stat card counts the notices the API flags `in_queue` (an `exceeds` outcome and a comment window
 that has not closed). Clicking it sets `outcome=exceeds&open=true&sort=days_left.asc`, which lists the same notices; the
@@ -55,9 +56,17 @@ browser never sends record data. Answers are labelled "Explanation, not assessme
 memory per scope and are lost on reload; only the open state is in the URL. When `GET /api/risk/chat` reports
 `enabled: false`, the panel shows the reason and the composer is disabled.
 
+The **Draft letter** section (`notice-draft.tsx`) shows the letter kind with its RR basis, the counterparty, the
+deadline and any warnings above the letter, with Copy, Download `.md` (`ific<no>-<ntc_id>-<kind>.md`) and **Polish
+with LLM**. A notice without a concern shows the API's 409 reason instead. A polished letter lives in component state
+only, with a Template/Polished toggle, and is dropped when the notice or `as_of` changes; a rejected polish keeps the
+template and lists the protected tokens that changed. The polish button is disabled with the reason when the chat
+reports the LLM is off. Reviewer notes sit in a collapsed "Internal – do not send" block. Every view carries the
+"DRAFT – for expert review, not sent" banner.
+
 Components: `risk-header.tsx` (issue picker, Assess button with 3 s job polling, Method popover), `risk-table.tsx`,
 `notice-sheet.tsx` (detail), `risk-chart.tsx` (inline-SVG likelihood–consequence chart), `hazard-inventory.tsx`,
-`risk-compare.tsx`, `risk-chat.tsx`, `outcome-badge.tsx` and `risk-meta.ts`. Chart series use the `--series-1..5` tokens, so the
+`risk-compare.tsx`, `risk-chat.tsx`, `notice-draft.tsx`, `outcome-badge.tsx` and `risk-meta.ts`. Chart series use the `--series-1..5` tokens, so the
 status tokens stay reserved for state.
 
 ## `/stations` (stations map)

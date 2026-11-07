@@ -53,7 +53,7 @@ def is_near_limit(h: dict[str, Any]) -> bool:
     )
 
 
-def _worst_p95(h: dict[str, Any]) -> float | None:
+def worst_p95(h: dict[str, Any]) -> float | None:
     vals = [e["p95_db"] for e in h["exceedance_db"] if e["p95_db"] is not None]
     return max(vals) if vals else None
 
@@ -69,6 +69,7 @@ class MainBeam:
     sat_el_deg: float
     off_axis_deg: float
     hpbw_deg: float
+    hazard_id: str | None
 
 
 def main_beam_hits(hazards: list[dict[str, Any]], stations: list[Receiver], lon_nom: float) -> list[MainBeam]:
@@ -111,12 +112,37 @@ def main_beam_hits(hazards: list[dict[str, Any]], stations: list[Receiver], lon_
                     float(el[0]),
                     off,
                     hpbw,
+                    h.get("hazard_id"),
                 )
     return sorted(hits.values(), key=lambda m: m.off_axis_deg)
 
 
+@dataclass(frozen=True)
+class Readings:
+    source: str
+    live: tuple[dict[str, Any], ...]
+    exceeds: tuple[dict[str, Any], ...]
+    near_limit: tuple[dict[str, Any], ...]
+    main_beam: tuple[MainBeam, ...]
+
+    def __bool__(self) -> bool:
+        return bool(self.exceeds or self.near_limit or self.main_beam)
+
+
+def notice_readings(detail: dict[str, Any], stations: list[Receiver], lon_nom: float | None) -> Readings:
+    """The three readings of one stored notice; `main_beam` needs the GSO nominal longitude."""
+    live = tuple(h for h in detail["hazards"] if h["mode"] in QUANTIFIED_MODES)
+    return Readings(
+        source=detail["receiver_source"],
+        live=live,
+        exceeds=tuple(h for h in live if h["outcome"] == "exceeds"),
+        near_limit=tuple(h for h in live if is_near_limit(h)),
+        main_beam=tuple(main_beam_hits(list(live), stations, lon_nom)) if lon_nom is not None else (),
+    )
+
+
 def _hazard_line(h: dict[str, Any]) -> str:
-    p95 = _worst_p95(h)
+    p95 = worst_p95(h)
     share = "—" if h["share_violating"] is None else f"{h['share_violating']:.0%}"
     return f"{h['hazard_id']} (share {share}, p95 {'—' if p95 is None else f'{p95:+.1f} dB'})"
 
@@ -134,18 +160,15 @@ def triage(
     for summary in store.list_notices(con, ific_no, "stations", as_of)[0]:
         ntc = summary["ntc_id"]
         detail = store.get_notice(con, ific_no, "stations", ntc, as_of)
-        live = [h for h in detail["hazards"] if h["mode"] in QUANTIFIED_MODES]
-        exceeds = [h for h in live if h["outcome"] == "exceeds"]
-        near = [h for h in live if is_near_limit(h)]
-        beams = main_beam_hits(live, stations, lon_nom[ntc]) if lon_nom.get(ntc) is not None else []
+        readings = notice_readings(detail, stations, lon_nom.get(ntc))
         g = generic.get(ntc)
         group = (
             "A"
-            if exceeds
+            if readings.exceeds
             else "B"
-            if beams
+            if readings.main_beam
             else "C"
-            if near
+            if readings.near_limit
             else "D"
             if g and g["worst_outcome"] == "exceeds"
             else None
@@ -165,11 +188,11 @@ def triage(
                 "stations_worst": summary["worst_outcome"],
                 "stations_share": summary["max_share_violating"],
                 "stations_max_p95_db": max(
-                    (p for h in live if (p := _worst_p95(h)) is not None), default=None
+                    (p for h in readings.live if (p := worst_p95(h)) is not None), default=None
                 ),
-                "exceeds": [_hazard_line(h) for h in exceeds],
-                "near_limit": [_hazard_line(h) for h in near],
-                "main_beam": beams,
+                "exceeds": [_hazard_line(h) for h in readings.exceeds],
+                "near_limit": [_hazard_line(h) for h in readings.near_limit],
+                "main_beam": list(readings.main_beam),
                 "generic_worst": g["worst_outcome"] if g else None,
                 "generic_share": g["max_share_violating"] if g else None,
                 "br_fin": reg["fin_identified"],

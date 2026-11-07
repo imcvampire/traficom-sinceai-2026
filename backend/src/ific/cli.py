@@ -217,6 +217,55 @@ def review(
         con.close()
 
 
+@app.command()
+def draft(
+    issue: Issue,
+    as_of: Annotated[str, typer.Option("--as-of", help="Evaluation date YYYY-MM-DD")],
+    ntc: Annotated[
+        list[int] | None,
+        typer.Option("--ntc", help="Only this notice (repeatable); default: every assessed one"),
+    ] = None,
+    out: Annotated[
+        Path | None,
+        typer.Option("--out", help="Output directory (default plans/reports/drafts-ISSUE-AS_OF/)"),
+    ] = None,
+) -> None:
+    """Write a draft letter to the notifying administration for each notice with a concern (no LLM)."""
+    from ific.config import PROJECT_ROOT
+    from ific.riia import draft as drafts
+    from ific.riia import store
+
+    day = date.fromisoformat(as_of)
+    con, no = _prepare(issue)
+    try:
+        ids = ntc or sorted(
+            {n["ntc_id"] for source in drafts.SOURCES for n in store.list_notices(con, no, source, day)[0]}
+        )
+        if not ids:
+            typer.echo(f"IFIC {no} has no stored assessment; run `ific assess` first", err=True)
+            raise typer.Exit(1)
+        out = out or PROJECT_ROOT / "plans" / "reports" / f"drafts-{no}-{day.isoformat()}"
+        out.mkdir(parents=True, exist_ok=True)
+        kinds: dict[str, int] = {}
+        skipped = missing = 0
+        for ntc_id in ids:
+            d = drafts.build_draft(con, no, ntc_id, day)
+            if d is None:
+                missing += 1
+                typer.echo(f"notice {ntc_id} has not been assessed", err=True)
+            elif isinstance(d, drafts.NoConcern):
+                skipped += 1
+            else:
+                (out / f"{ntc_id}-{d.kind}.md").write_text(drafts.to_markdown(d), encoding="utf-8")
+                kinds[d.kind] = kinds.get(d.kind, 0) + 1
+        typer.echo(
+            f"wrote {sum(kinds.values())} drafts to {out}; kinds={dict(sorted(kinds.items()))} "
+            f"no_concern={skipped}" + (f" not_assessed={missing}" if missing else "")
+        )
+    finally:
+        con.close()
+
+
 @app.command("assess-sensitivity")
 def assess_sensitivity(
     issue: Issue,

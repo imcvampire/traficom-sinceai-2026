@@ -83,6 +83,7 @@ Run the CLI from `backend/` with `uv run ific <command>`, or from anywhere with 
 | `ific ingest ISSUE` | Load an issue into DuckDB (no-op when unchanged) |
 | `ific assess ISSUE [--as-of YYYY-MM-DD] [--source generic-m4\|stations] [--json PATH] [--consistency PATH] [--summary PATH]` | Assess every notice of an issue and store the results |
 | `ific review ISSUE --as-of YYYY-MM-DD [--out PATH]` | Write a concern-triage report (Markdown and CSV) from stored results |
+| `ific draft ISSUE --as-of YYYY-MM-DD [--ntc N]... [--out DIR]` | Write a draft letter to the notifying administration (Markdown, with internal reviewer notes) for each notice with a concern, from stored results; default `--out` is `plans/reports/drafts-ISSUE-AS_OF/` |
 | `ific assess-sensitivity ISSUE --as-of YYYY-MM-DD [--out PATH]` | Report which outcomes flip when assumptions move within their ranges |
 
 Example:

@@ -351,6 +351,9 @@ every issue must be re-assessed after a bump; stored results keep the version th
 | `GET /api/risk/issues/{no}/notices?as_of=&view=` | Technical order, or `view=queue` for the work queue. `as_of` only changes the regulatory fields. |
 | `GET /api/risk/issues/{no}/notices/{ntc_id}?as_of=` | Full hazard inventory with curves, inputs, citations, assumptions and regulatory context. |
 | `GET /api/risk/model` | Method steps, references, receiver classes and input sources. |
+| `GET /api/risk/issues/{no}/notices/{ntc_id}/draft?as_of=` | Draft letter to the notifying administration (see [Draft correspondence](#draft-correspondence)): 404 when not assessed, 409 with the reason when there is no concern. |
+| `POST /api/risk/issues/{no}/notices/{ntc_id}/draft/polish?as_of=` | LLM rewrite of the letter's prose under the protected-token guard: 422 with `missing` and `added` tokens when rejected, 503 when the LLM is off, 429 when busy. |
+| `uv run ific draft <no> --as-of … [--ntc N] [--out DIR]` | One Markdown draft per notice with a concern; needs the API stopped. |
 
 Results go to `analytics.risk_notice`, `risk_hazard`, `risk_job` and `risk_sensitivity`; one transaction replaces an
 issue's rows, and a failed job keeps the previous results. Jobs run on their own thread and DuckDB cursor, one per
@@ -387,6 +390,43 @@ receiver sources (definitions in `backend/src/ific/riia/review.py`), never a sco
 The stations source (`ific assess <no> --source stations`) uses the frequencies-of-interest stations: real location,
 receive band, height, azimuth and gain. Broadcast transmitter licences are excluded; station gains above a 4 m, 60 %
 aperture are capped as data errors; directional stations in an omnidirectional class use the F.1245 envelope.
+
+### Draft correspondence
+
+Step 9 of the brief: name the counterparty and draft correspondence for expert review. `backend/src/ific/riia/draft.py`
+builds a letter from the Administration of Finland to the notifying administration (`space.notice.adm`) for a notice
+that has at least one triage reading (`exceeds`, `near_limit` or `main_beam`) in the stored `stations` or
+`generic-m4` results. A notice without a reading gets no draft. Drafts are built on demand and never stored.
+
+The letter kind is a pure function of the stored regulatory context, quoting the cites in
+`data/ref/rr_comment_windows.json`:
+
+| Kind | Rule | Basis |
+|---|---|---|
+| `comment_9_52` | Stage CR/C, window open, the BR identified Finland | RR No. 9.52 (with No. 9.52C) |
+| `inclusion_9_41` | Stage CR/C, window open, the BR did not identify Finland | RR No. 9.41, and comments under No. 9.52 |
+| `comment_9_3` | Stage API/A, window open | RR No. 9.3 |
+| `enquiry` | Any other case: Notification, Resolution 49, or a closed window | None; an informal technical enquiry, with a warning |
+
+`as_of` only moves a notice between kinds through the comment window, as everywhere else.
+
+- **Counterparty.** The administration name comes from `data/ref/itu_administrations.json` (symbol → name, cited to
+  the IFIC Preface, review status pending). An unknown code is shown as the code with a warning, never a guessed name.
+- **Annex.** One row per receiver source, hazard and reading, with the stored share of receivers violating, worst
+  95th-percentile exceedance, Tier 1 worst case, bands and the criterion (metric, level, time %, cite) behind the
+  worst exceedance. Values are copied from the stored hazard; only display rounding is applied. A `Basis` line quotes
+  the RR cite verbatim. The annex reads off outcomes and never combines them.
+- **Reviewer notes** (internal, never part of the letter): the deadline, the receiver sources used and skipped, the
+  outcome-sensitive assumptions of each cited hazard, the radio astronomy weakness (item 8 below), the review status
+  of the reference tables, and station-level details of `main_beam` readings. Station ids, coordinates, azimuths and
+  gains come from an internal dataset, so they stay out of the letter, which only names the band and service.
+- **LLM polish.** Only the body paragraphs are sent to the LLM; the header, annex and Basis line never are. Every fact
+  in the prose is written in digits so that a guard can check it: the rewrite must keep exactly the same protected
+  tokens (numbers, dates, provisions, hazard ids, the bracketed administration code) and the same number of
+  paragraphs, or it is rejected and the template text is kept. The LLM picks nothing: not the kind, the provision or
+  the hazards.
+- **Not covered:** AP30/AP30A/AP30B plan-procedure letters, "no objection" replies, French or Spanish letters,
+  letter addresses and signatories (placeholders), and storing or tracking drafts.
 
 ## Known weaknesses
 

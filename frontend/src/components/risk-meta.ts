@@ -1,6 +1,7 @@
 import { Ban, CircleCheck, CircleHelp, OctagonAlert, ShieldCheck, type LucideIcon } from 'lucide-react'
 import type {
   CurveGrid,
+  DraftKind,
   Hazard,
   HazardMode,
   NoticeDetail,
@@ -104,6 +105,32 @@ export const SERIES_COLORS = [1, 2, 3, 4, 5].map((i) => `var(--series-${i})`)
 export const ORBIT_LABEL: Record<OrbitType, string> = { gso: 'GSO', ngso: 'NGSO', es: 'Earth station' }
 
 export const STAGE_SHORT: Record<Stage, string> = { 'API/A': 'API', 'CR/C': 'CR', Notification: 'N', Res49: 'Res49' }
+
+export const DRAFT_BANNER = 'DRAFT – for expert review, not sent'
+
+/** Letter kinds of the draft correspondence; the API picks one from the stage, the open window and the BR findings. */
+export const DRAFT_KIND_META: Record<DraftKind, { label: string; description: string }> = {
+  comment_9_52: {
+    label: 'Comment under RR No. 9.52',
+    description:
+      'The BR identified Finland on this coordination request (CR/C) and the comment window is open: Finland informs the notifying administration that it does not agree and asks for coordination. Without a reply in time, RR No. 9.52C lets Finland be treated as not affected.',
+  },
+  inclusion_9_41: {
+    label: 'Request for inclusion under RR No. 9.41',
+    description:
+      'The BR did not identify Finland on this coordination request (CR/C) and the comment window is open: Finland asks to be included in the coordination procedure and comments under RR No. 9.52.',
+  },
+  comment_9_3: {
+    label: 'Comment under RR No. 9.3',
+    description:
+      'Advance publication (API/A) with the comment window open: Finland informs the notifying administration of the interference it anticipates.',
+  },
+  enquiry: {
+    label: 'Informal technical enquiry',
+    description:
+      'No RR comment window applies: the notice is at Notification or Resolution 49 stage, or its window has closed. The letter asks for technical information and claims no RR basis.',
+  },
+}
 
 export const RECEIVER_SOURCE_LABEL = 'Generic population (M4 × grid over Finland)'
 

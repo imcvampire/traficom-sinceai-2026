@@ -33,6 +33,7 @@ export type RiskSearch = RiskTableView & {
   compare?: string
   as_of?: string
   chat?: boolean
+  draft?: boolean
 }
 
 const route = getRouteApi('/risk')
@@ -367,9 +368,11 @@ export function RiskPage() {
             ntcId={search.ntc}
             asOf={asOf}
             assessedAt={assessedAt}
-            onClose={() => patch({ ntc: undefined, chat: undefined })}
+            onClose={() => patch({ ntc: undefined, chat: undefined, draft: undefined })}
             chatOpen={Boolean(search.chat)}
             onChatOpenChange={(open) => patch({ chat: open || undefined })}
+            draftOpen={Boolean(search.draft)}
+            onDraftOpenChange={(open) => patch({ draft: open || undefined })}
             chat={search.ntc != null && chatPanel}
           />
 

@@ -5,6 +5,7 @@ import {
   assessIssue,
   checkNow,
   getChatStatus,
+  getDraft,
   getHealth,
   getRiskModel,
   getRiskNotice,
@@ -14,6 +15,7 @@ import {
   listRiskIssues,
   listRiskNotices,
   listStations,
+  polishDraft,
   setWatcherEnabled,
   type IssueOut,
   type NoticeView,
@@ -86,6 +88,21 @@ export const riskNoticeQuery = (ificNo: number, ntcId: number, asOf: string, ass
     queryFn: () => getRiskNotice(ificNo, ntcId, asOf),
     retry: (count, err) => !(err instanceof ApiError && err.status === 404) && count < 1,
   })
+
+// A 409 (no concern to describe) and a 404 are answers, not failures to retry.
+export const draftQuery = (ificNo: number, ntcId: number, asOf: string, assessedAt: string | null) =>
+  queryOptions({
+    queryKey: [...queryKeys.riskNotices(ificNo), ntcId, 'draft', { asOf, assessedAt }] as const,
+    queryFn: () => getDraft(ificNo, ntcId, asOf),
+    retry: (count, err) => !(err instanceof ApiError && [404, 409].includes(err.status)) && count < 1,
+  })
+
+export function usePolishDraft() {
+  return useMutation({
+    mutationFn: ({ ificNo, ntcId, asOf }: { ificNo: number; ntcId: number; asOf: string }) =>
+      polishDraft(ificNo, ntcId, asOf),
+  })
+}
 
 // Contours depend only on the station data and these two inputs, so results never go stale within a session.
 export const stationsQuery = (timePct: StationTimePct, threshold: number) =>

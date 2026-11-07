@@ -25,7 +25,7 @@ uv run --project backend ruff format backend                         # backend f
 
 The frontend has no formatter configured; match the surrounding style (single quotes, no semicolons, 2 spaces).
 
-The CLI commands that write to DuckDB (`ingest`, `assess`, `review`, `assess-sensitivity`) fail while the API is
+The CLI commands that open DuckDB (`ingest`, `assess`, `review`, `draft`, `assess-sensitivity`) fail while the API is
 running, because DuckDB allows one writer. Stop the server first, or trigger an assessment through the API instead
 (`POST /api/risk/issues/{ific_no}`).
 
@@ -84,6 +84,10 @@ Invariants to keep:
 
 The `/risk` chat context is assembled server-side in `riia/chat.py` from stored results and the method doc, and
 streamed by `llm.py`. It must keep the no-score rule: no `score` key, no ranking, and no curve arrays in the context.
+
+Draft letters (`riia/draft.py`) are built on demand and never stored. Their kind comes from the regulatory context,
+never from the LLM. The LLM polish rewrites the body paragraphs only, and `check_polish` rejects any change to the
+protected tokens. Station ids, coordinates and azimuths go in the reviewer notes, never in the letter.
 
 `propagation/` (ITU-R P.1546 field strength and T/R 25-08 triggers) and `stations.py` serve the `/stations` map. They
 are separate from the space risk model.

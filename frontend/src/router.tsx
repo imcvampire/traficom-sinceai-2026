@@ -73,6 +73,7 @@ const riskRoute = createRoute({
       compare: compare && COMPARE_RE.test(compare) ? compare : undefined,
       as_of: asDate(search.as_of),
       chat: asFlag(search.chat),
+      draft: asFlag(search.draft),
     }
   },
 })
