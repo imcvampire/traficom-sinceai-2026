@@ -1,0 +1,33 @@
+{
+  "cite": "Wording basis of terrestrial draft letters per kind. The kind is chosen in code from the stored findings (ific.terra.draft.choose_kind), never by the LLM.",
+  "review": {
+    "status": "to_confirm",
+    "note": "Provisions and wording to be confirmed by the Traficom specialists. Bilateral agreements are named, never quoted: their contents are not in the repository.",
+    "date": "2026-11-07"
+  },
+  "rr_edition": "Radio Regulations, Edition of 2024",
+  "kinds": {
+    "coordination_request": {
+      "subject": "request for coordination of land mobile assignments",
+      "when": "FIN coordination is COORD REQUIRED, or the field strength exceeds the trigger and no FIN coordination is recorded",
+      "ask": "We therefore request that these assignments be coordinated with the Administration of Finland before they are brought into use, and that the technical characteristics listed in the annex be confirmed.",
+      "provisions": [
+        "RR No. 6.7 (agreements between administrations, recorded in the notice as the coordination provision)",
+        "the coordination procedure of the applicable ECC criterion"
+      ]
+    },
+    "enquiry": {
+      "subject": "technical enquiry on coordinated land mobile assignments",
+      "when": "the field strength exceeds the trigger while FIN coordination is recorded as COORD COMPLETED",
+      "ask": "We would be grateful if you could confirm that the characteristics notified correspond to those coordinated with the Administration of Finland.",
+      "provisions": [
+        "informal technical enquiry, not a reply under an RR comment provision"
+      ]
+    }
+  },
+  "basis": {
+    "ecc": "The field strength is assessed against {criterion}, which is {applicability} for the notifying administration.",
+    "governing": "The governing basis for coordination between our administrations is the {governing}; the ECC criterion is quoted as indicative only.",
+    "ge06": "Assignments notified under the GE06 Regional Agreement are subject to its Article 4 procedure."
+  }
+}

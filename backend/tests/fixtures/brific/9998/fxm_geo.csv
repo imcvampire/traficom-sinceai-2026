@@ -1,0 +1,5 @@
+geo_key,geo_type,ctry,site_name,zone_id,radius,d_updated,src_update,longitude_dms,latitude_dms,seconds_in_use,long_dec,lat_dec,site_alt
+1,POINT,RUS,LEN SLANCY,,,,,,,,28.1952777777778,59.1125,62
+3,POINT,EST,TALLINN,,,,,,,,24.7536,59.437,20
+20,POINT,RUS,PSKOV,,,,,,,,28.33,57.82,20
+21,POINT,RUS,KINGISEPP,,,,,,,,28.61,59.37,20

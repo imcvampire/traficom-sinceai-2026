@@ -1,0 +1,29 @@
+stn_cls,description
+AL,Aeronautical radionavigation land station
+AM,Aeronautical radionavigation mobile station
+BC,"Broadcasting station, sound"
+BT,"Broadcasting station, television"
+FA,Aeronautical station
+FB,Base station
+FC,Coast station
+FD,Aeronautical station in the aeronautical mobile (R) service
+FG,Aeronautical station in the aeronautical mobile (OR) service
+FL,Land station
+FP,Port station
+FX,Fixed station
+LR,Radiolocation land station
+MA,Aircraft station
+ML,Land mobile station
+MO,Mobile station
+MR,Radiolocation mobile station
+MS,Ship station
+NL,Maritime radionavigation land station
+NR,Radionavigation mobile station
+OD,Oceanographic data station
+OE,Oceanographic data interrogation station
+PL,Combination of two or more classes of station (RR 2184)
+RM,Maritime radionavigation mobile station
+RN,Radionavigation land station
+SA,Meteorological aids mobile station
+SM,Meteorological aids base station
+SS,Standard frequency and time signal station

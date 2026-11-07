@@ -42,6 +42,7 @@ def watch_check() -> None:
 
 
 Issue = Annotated[str, typer.Argument(help="Issue number or path to ificNNNN.mdb")]
+TerraIssue = Annotated[str, typer.Argument(help="Terrestrial issue: tNNNN, NNNN or path to brificNNNN.mdb")]
 
 
 def _connect():
@@ -94,13 +95,64 @@ def _ingest(con, issue: str) -> int:
     return no
 
 
+def _is_terra(issue: str) -> bool:
+    from ific import ingest
+
+    return ingest.terra_issue_no(Path(issue)) is not None or (issue[:1] in "tT" and issue[1:].isdigit())
+
+
+def _resolve_terra_issue(issue: str) -> tuple[int, Path | None]:
+    from ific import ingest
+    from ific.config import settings
+
+    path = Path(issue)
+    if path.suffix.lower() == ".mdb":
+        no = ingest.terra_issue_no(path)
+        if no is None:
+            typer.echo(f"cannot read the issue number from {path.name} (expected brificNNNN.mdb)", err=True)
+            raise typer.Exit(2)
+        return no, path
+    digits = issue[1:] if issue[:1] in "tT" else issue
+    if not digits.isdigit():
+        typer.echo(f"expected tNNNN, NNNN or a brificNNNN.mdb path, got {issue!r}", err=True)
+        raise typer.Exit(2)
+    return int(digits), ingest.discover_terra_issues(settings).get(int(digits))
+
+
+def _ingest_terra(con, issue: str, verbose: bool = False) -> int:
+    from ific import ingest
+
+    no, path = _resolve_terra_issue(issue)
+    if path is None:
+        if no in ingest.ingested_terra_issues(con):
+            return no
+        typer.echo(f"BR IFIC {no} not found in the terrestrial download dir or project root", err=True)
+        raise typer.Exit(1)
+    try:
+        status = ingest.ensure_terra_issue(con, no, path)
+    except ingest.IngestError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1) from e
+    action = "unchanged" if status.action == "up_to_date" else status.action
+    typer.echo(f"brific={no} {action} assignments={status.notices} ({status.ms} ms)")
+    if verbose:
+        for table, n in ingest.terra_table_counts(con, no).items():
+            typer.echo(f"  {table:<26} {n}")
+    return no
+
+
 @app.command("ingest")
-def ingest_cmd(issue: Issue) -> None:
-    """Load a Space IFIC issue into the DuckDB `space` schema (no-op when unchanged)."""
+def ingest_cmd(
+    issue: Annotated[str, typer.Argument(help="ificNNNN.mdb / NNNN (space), brificNNNN.mdb / tNNNN")],
+) -> None:
+    """Load a Space IFIC issue into `space`, or a terrestrial one into `terra` (no-op if unchanged)."""
     logging.basicConfig(level=logging.INFO, format=_LOG_FORMAT)
     con = _connect()
     try:
-        _ingest(con, issue)
+        if _is_terra(issue):
+            _ingest_terra(con, issue, verbose=True)
+        else:
+            _ingest(con, issue)
     finally:
         con.close()
 
@@ -293,6 +345,104 @@ def assess_sensitivity(
         )
         out.write_text(sensitivity.report(no, day, population.name, rows, flips), encoding="utf-8")
         typer.echo(f"wrote {out}; outcome-sensitive: {sorted(k for k, v in flips.items() if v)}")
+    finally:
+        con.close()
+
+
+def _prepare_terra(issue: str):
+    from ific import m4
+    from ific.config import settings
+
+    con = _connect()
+    m4.ensure_m4(con, settings)
+    return con, _ingest_terra(con, issue)
+
+
+@app.command("terra-assess")
+def terra_assess(
+    issue: TerraIssue,
+    json_path: Annotated[
+        Path | None, typer.Option("--json", help="Write a canonical JSON export here")
+    ] = None,
+) -> None:
+    """Assess the foreign land mobile assignments of one terrestrial issue (terra-1) and store the results."""
+    from ific.terra import store
+    from ific.terra.assess import assess_issue
+
+    logging.basicConfig(level=logging.INFO, format=_LOG_FORMAT)
+    con, no = _prepare_terra(issue)
+    try:
+        stats: dict[str, float] = {}
+        results = assess_issue(con, no, stats_out=stats)
+        store.write_results(con, no, results)
+        if json_path:
+            json_path.write_text(store.canonical_json(results), encoding="utf-8")
+        typer.echo(
+            f"brific={no} assignments={len(results)} relevant="
+            f"{sum(1 for r in results if r['relevance']['relevant'])} {store.outcome_counts(results)} "
+            f"({stats['duration_ms']} ms)"
+        )
+    finally:
+        con.close()
+
+
+def _stored_terra(con, no: int) -> list:
+    from ific.terra import store
+
+    results = store.all_results(con, no)
+    if not results:
+        typer.echo(f"BR IFIC {no} has no stored assessment; run `ific terra-assess t{no}` first", err=True)
+        raise typer.Exit(1)
+    return results
+
+
+@app.command("terra-export")
+def terra_export(
+    issue: TerraIssue,
+    out: Annotated[Path, typer.Option("--out", help="Output directory")],
+) -> None:
+    """Write terra-<no>.json, .csv and .md from the stored terrestrial assessment."""
+    from ific.terra import export
+
+    con, no = _prepare_terra(issue)
+    try:
+        results = _stored_terra(con, no)
+        out.mkdir(parents=True, exist_ok=True)
+        (out / f"terra-{no}.json").write_text(export.to_json(results), encoding="utf-8")
+        (out / f"terra-{no}.csv").write_text(export.to_csv(results), encoding="utf-8")
+        (out / f"terra-{no}.md").write_text(export.to_markdown(no, results), encoding="utf-8")
+        typer.echo(f"wrote terra-{no}.json, .csv and .md to {out}")
+    finally:
+        con.close()
+
+
+@app.command("terra-draft")
+def terra_draft(
+    issue: TerraIssue,
+    adm: Annotated[
+        list[str] | None, typer.Option("--adm", help="Administration code (repeatable); default: every one")
+    ] = None,
+    out: Annotated[Path | None, typer.Option("--out", help="Output directory")] = None,
+) -> None:
+    """Write a draft letter per administration with concerns in a terrestrial issue (no LLM)."""
+    from ific.config import PROJECT_ROOT
+    from ific.terra import draft as drafts
+
+    con, no = _prepare_terra(issue)
+    try:
+        _stored_terra(con, no)
+        adms = [a.upper() for a in adm] if adm else list(drafts.concern_adms(con, no))
+        out = out or PROJECT_ROOT / "plans" / "reports" / f"terra-drafts-{no}"
+        out.mkdir(parents=True, exist_ok=True)
+        written = []
+        for a in adms:
+            d = drafts.build_draft(con, no, a)
+            if d is None or isinstance(d, drafts.NoConcern):
+                typer.echo(f"{a}: no letter ({'not assessed' if d is None else d.reason})", err=True)
+                continue
+            (out / f"{a}-{d.kind}.md").write_text(drafts.to_markdown(d), encoding="utf-8")
+            written.append(f"{a}:{d.kind}")
+        typer.echo(f"wrote {len(written)} drafts to {out}: {', '.join(written)}")
     finally:
         con.close()
 

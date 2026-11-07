@@ -1,0 +1,58 @@
+{
+  "cite": "Cross-border coordination triggers for land mobile assignments, by band. T/R 25-08 is built at load time from ific.propagation.tr2508 (its single source of truth) and is not repeated here.",
+  "review": {
+    "status": "unverified transcription",
+    "note": "ecc-rec-11-04 transcribed on 2026-11-07 from the ECC document database PDF (download 4842, edition 7 November 2025). A person still has to check every quoted value against the PDF pages and record their name and the date in verified_by.",
+    "date": "2026-11-07"
+  },
+  "generated": ["tr-25-08"],
+  "criteria": [
+    {
+      "id": "ecc-rec-11-04",
+      "title": "ECC/REC/(11)04: cross-border coordination for MFCN in the band 791-862 MHz",
+      "citation": "ECC/REC/(11)04 (amended 7 November 2025), Annex 1 Table 1 and Annex 2",
+      "doc_url": "https://docdb.cept.org/document/500",
+      "doc_file": "https://docdb.cept.org/download/4842 (ECC Recommendation (11)04.pdf)",
+      "doc_sha256": "660d7571bebbee20d86bc14d52efb3dd888eae7d563d498a50a478aa2424c9f2",
+      "f_min_mhz": 791.0,
+      "f_max_mhz": 821.0,
+      "edges": "[791, 821] MHz inclusive: Annex 1 (page 5) gives the base-station field strengths for 791-821 MHz; 821-862 MHz is the FDD uplink (terminals), which has no base-station trigger",
+      "time_pct": 10.0,
+      "loc_pct": 50.0,
+      "rx_height_m": 3.0,
+      "reference_bw_khz": 5000.0,
+      "bw_correction": "10log10(bw/ref)",
+      "bw_correction_quote": "Annex 1 (page 5): 'In cases of other frequency block sizes other than 5 MHz, a factor of 10 × log10 (channel bandwidth/5 MHz) should be added to the field strength values.'",
+      "propagation_quote": "Annex 2 (page 7), Site General model: 'the basic model ... is Recommendation ITU-R P.1546. This model is to be employed for 50% locations, 10% time and using a receiver height of 3 m.'",
+      "evaluation": "border",
+      "evaluation_quote": "Annex 1 Table 1 (page 6): '@ stands for \"at a distance from the borderline into the neighbouring country\"'; the assessed trigger is the one given '@ 0 km'.",
+      "bands": [
+        {
+          "f_min_mhz": 791.0,
+          "f_max_mhz": 821.0,
+          "trigger_dbuv_m": 41.0,
+          "evaluation_km": 0.0,
+          "case": "synchronisation signal centre frequencies aligned, non-preferential PCIs",
+          "quote": "Annex 1 (page 5): '41 dB(µV/m)/5 MHz at a height of 3 m above ground at the borderline between neighbouring countries.'"
+        }
+      ],
+      "other_levels": [
+        {
+          "trigger_dbuv_m": 59.0,
+          "evaluation_km": 0.0,
+          "case": "centre frequencies not aligned, or aligned with preferential PCIs",
+          "quote": "Annex 1 (page 5): '59 dB(µV/m)/5 MHz at a height of 3 m above ground at the borderline between countries'"
+        },
+        {
+          "trigger_dbuv_m": 41.0,
+          "evaluation_km": 6.0,
+          "case": "centre frequencies not aligned, or aligned with preferential PCIs",
+          "quote": "Annex 1 (page 5): '41 dB(µV/m)/5 MHz at a height of 3 m above ground at a distance of 6 km inside the neighbouring country.'"
+        }
+      ],
+      "selection_note": "The notices do not say whether centre frequencies are aligned or which PCIs are used, so the most restrictive border level (41 dB(µV/m)/5 MHz @ 0 km) is assessed (assumption A-T-ECC-NONPREF). The 59 dB(µV/m) level is reported beside it.",
+      "verified": false,
+      "verified_by": null
+    }
+  ]
+}

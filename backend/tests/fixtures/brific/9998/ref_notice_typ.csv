@@ -1,0 +1,50 @@
+notice_typ,domain,is_exclusive_ge06,is_grandfathered,description
+1A1,FXM,FALSE,TRUE,
+1A2,LFMF,FALSE,TRUE,
+1A4,FMTV,FALSE,TRUE,
+1A5,FMTV,FALSE,TRUE,
+1A6,FMTV,FALSE,TRUE,
+1A7,LFMF,FALSE,TRUE,
+1B1,FXM,FALSE,TRUE,
+1C1,FXM,FALSE,TRUE,
+1Z0,FXM,FALSE,TRUE,
+DS1,FMTV,TRUE,TRUE,
+DS2,FMTV,TRUE,TRUE,
+DT1,FMTV,TRUE,TRUE,
+DT2,FMTV,TRUE,TRUE,
+G02,FMTV,TRUE,FALSE,
+G11,FXM,TRUE,FALSE,GE06 Terrestrial Transmitting Station (TX) in the Fixed Service                 
+G12,FXM,TRUE,FALSE,"GE06 Terrestrial Transmitting Station (TX) except FX, LF/MF/VHF/UHF BC, Typical "
+G13,FXM,TRUE,FALSE,GE06 Terrestrial Receiving Land Station (RX)                                    
+G14,FXM,TRUE,FALSE,GE06 Terrestrial Typical Transmitting Station (TP)                              
+GA1,FMTV,TRUE,FALSE,
+GB1,FMTV,TRUE,FALSE,
+GS1,FMTV,TRUE,FALSE,
+GS2,FMTV,TRUE,FALSE,
+GT1,FMTV,TRUE,FALSE,
+GT2,FMTV,TRUE,FALSE,
+T01,FMTV,FALSE,FALSE,
+T02,FMTV,FALSE,FALSE,
+T03,LFMF,FALSE,FALSE,
+T04,LFMF,FALSE,FALSE,
+T11,FXM,FALSE,FALSE,Terrestrial Transmitting Station (TX) in the Fixed Service                      
+T12,FXM,FALSE,FALSE,"Terrestrial Transmitting Station (TX) except Fixed, LF/MF/VHF/UHF BC, Typical   "
+T13,FXM,FALSE,FALSE,Terrestrial Receiving Land Station (RX)                                         
+T14,FXM,FALSE,FALSE,Terrestrial Typical Transmitting Station (TP)                                   
+T15,FXM,FALSE,FALSE,Frequency Allotment in the Maritime Mobile Service                              
+T16,FXM,FALSE,FALSE,Terrestrial Transmitting Station (TX) (Plan Update of GE85)                     
+T17,FXM,FALSE,FALSE,Terrestrial Transmitting Station (TX) using Adaptive Systems                    
+T18,FXM,FALSE,FALSE,Transmitting HAPS in the Fixed Service
+T19,FXM,FALSE,FALSE,Receiving HAPS in the Fixed Service
+T20,FXM,FALSE,FALSE,Transmitting HAPS in the Mobile Service
+T21,FXM,FALSE,FALSE,Receiving HAPS in the Mobile Service
+TB1,FMTV,FALSE,FALSE,
+TB2,FMTV,FALSE,FALSE,
+TB3,FMTV,FALSE,FALSE,
+TB4,FMTV,FALSE,FALSE,
+TB5,FMTV,FALSE,FALSE,
+TB6,LFMF,FALSE,FALSE,
+TB7,LFMF,FALSE,FALSE,
+TB8,LFMF,FALSE,FALSE,
+TB9,LFMF,FALSE,FALSE,
+TP2,FMTV,FALSE,TRUE,

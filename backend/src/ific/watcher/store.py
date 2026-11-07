@@ -12,13 +12,17 @@ from typing import Literal
 from ific.watcher.source import IficListing
 
 FileStatus = Literal["new", "downloading", "downloaded", "failed"]
+FileKind = Literal["space", "terrestrial"]
 RunTrigger = Literal["schedule", "manual", "cli"]
 RunOutcome = Literal["ok", "error", "skipped"]
 
-SCHEMA_VERSION = 1
+# v2 added brific_files. Every table is CREATE IF NOT EXISTS, so running the schema on a v1 store is the
+# whole migration: it creates the new table and leaves the existing rows alone.
+SCHEMA_VERSION = 2
 
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS ific_files (
+_FILE_TABLES: dict[FileKind, str] = {"space": "ific_files", "terrestrial": "brific_files"}
+
+_FILE_COLUMNS = """(
     ific_no       INTEGER PRIMARY KEY,
     published_on  TEXT,
     zip_url       TEXT NOT NULL,
@@ -32,7 +36,11 @@ CREATE TABLE IF NOT EXISTS ific_files (
     attempts      INTEGER NOT NULL DEFAULT 0,
     discovered_at TEXT NOT NULL,
     downloaded_at TEXT
-);
+)"""
+
+_SCHEMA = (
+    "".join(f"CREATE TABLE IF NOT EXISTS {t} {_FILE_COLUMNS};\n" for t in _FILE_TABLES.values())
+    + """
 CREATE TABLE IF NOT EXISTS watcher_runs (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
     started_at       TEXT NOT NULL,
@@ -49,6 +57,7 @@ CREATE TABLE IF NOT EXISTS kv (
     value TEXT NOT NULL
 );
 """
+)
 
 _UI_ENABLED_KEY = "ui_enabled"
 _PAGE_KEY_PREFIX = "page:"
@@ -71,6 +80,8 @@ class FileRow:
     attempts: int
     discovered_at: datetime
     downloaded_at: datetime | None
+    etag: str | None
+    last_modified: str | None
 
 
 @dataclass(frozen=True)
@@ -108,6 +119,8 @@ def _file_row(row: sqlite3.Row) -> FileRow:
         attempts=row["attempts"],
         discovered_at=datetime.fromisoformat(row["discovered_at"]),
         downloaded_at=_dt(row["downloaded_at"]),
+        etag=row["etag"],
+        last_modified=row["last_modified"],
     )
 
 
@@ -117,7 +130,7 @@ class WatcherStore:
         path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as con:
             version = con.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, SCHEMA_VERSION):
+            if version not in (0, 1, SCHEMA_VERSION):
                 raise RuntimeError(
                     f"{path} has watcher schema v{version}, expected v{SCHEMA_VERSION}; delete it to reset"
                 )
@@ -166,23 +179,40 @@ class WatcherStore:
             )
         return len(fresh)
 
-    def pending_downloads(self) -> list[FileRow]:
+    def derive_terrestrial(self, since: date, url_template: str) -> int:
+        """Add a terrestrial row for every Space issue published on or after `since`; return how many.
+
+        The terrestrial BR IFIC shares its issue numbers with the Space IFIC, so the Space listing is the
+        only index needed and the terrestrial page itself is never scraped.
+        """
+        now = utcnow().isoformat()
+        with self._connect() as con:
+            space = con.execute(
+                "SELECT ific_no, published_on FROM ific_files WHERE published_on >= ?", (since.isoformat(),)
+            ).fetchall()
+            return con.executemany(
+                "INSERT OR IGNORE INTO brific_files (ific_no, published_on, zip_url, status, discovered_at) "
+                "VALUES (?, ?, ?, 'new', ?)",
+                [(r[0], r[1], url_template.format(no=r[0]), now) for r in space],
+            ).rowcount
+
+    def pending_downloads(self, kind: FileKind = "space") -> list[FileRow]:
         with self._connect() as con:
             rows = con.execute(
-                "SELECT * FROM ific_files WHERE status IN ('new', 'failed') ORDER BY ific_no DESC"
+                f"SELECT * FROM {_FILE_TABLES[kind]} WHERE status IN ('new', 'failed') ORDER BY ific_no DESC"
             ).fetchall()
         return [_file_row(r) for r in rows]
 
-    def list_files(self) -> list[FileRow]:
+    def list_files(self, kind: FileKind = "space") -> list[FileRow]:
         with self._connect() as con:
-            rows = con.execute("SELECT * FROM ific_files ORDER BY ific_no DESC").fetchall()
+            rows = con.execute(f"SELECT * FROM {_FILE_TABLES[kind]} ORDER BY ific_no DESC").fetchall()
         return [_file_row(r) for r in rows]
 
-    def mark_downloading(self, ific_no: int) -> None:
+    def mark_downloading(self, ific_no: int, kind: FileKind = "space") -> None:
         with self._connect() as con:
             con.execute(
-                "UPDATE ific_files SET status = 'downloading', attempts = attempts + 1, error = NULL "
-                "WHERE ific_no = ?",
+                f"UPDATE {_FILE_TABLES[kind]} SET status = 'downloading', attempts = attempts + 1, "
+                "error = NULL WHERE ific_no = ?",
                 (ific_no,),
             )
 
@@ -195,26 +225,49 @@ class WatcherStore:
         mdb_path: Path,
         etag: str | None,
         last_modified: str | None,
+        kind: FileKind = "space",
     ) -> None:
         with self._connect() as con:
             con.execute(
-                "UPDATE ific_files SET status = 'downloaded', size_bytes = ?, sha256 = ?, mdb_path = ?, "
-                "etag = ?, last_modified = ?, error = NULL, downloaded_at = ? WHERE ific_no = ?",
+                f"UPDATE {_FILE_TABLES[kind]} SET status = 'downloaded', size_bytes = ?, sha256 = ?, "
+                "mdb_path = ?, etag = ?, last_modified = ?, error = NULL, downloaded_at = ? "
+                "WHERE ific_no = ?",
                 (size_bytes, sha256, str(mdb_path), etag, last_modified, utcnow().isoformat(), ific_no),
             )
 
-    def mark_failed(self, ific_no: int, error: str) -> None:
+    def mark_unchanged(self, ific_no: int, kind: FileKind = "space") -> None:
+        """The server answered 304: the file on disk is current."""
         with self._connect() as con:
             con.execute(
-                "UPDATE ific_files SET status = 'failed', error = ? WHERE ific_no = ?", (error, ific_no)
+                f"UPDATE {_FILE_TABLES[kind]} SET status = 'downloaded', error = NULL WHERE ific_no = ?",
+                (ific_no,),
+            )
+
+    def mark_not_published(self, ific_no: int, kind: FileKind = "space") -> None:
+        """The server answered 404: back to `new`, and the attempt `mark_downloading` counted is undone."""
+        with self._connect() as con:
+            con.execute(
+                f"UPDATE {_FILE_TABLES[kind]} SET status = 'new', error = NULL, "
+                "attempts = MAX(attempts - 1, 0) WHERE ific_no = ?",
+                (ific_no,),
+            )
+
+    def mark_failed(self, ific_no: int, error: str, kind: FileKind = "space") -> None:
+        with self._connect() as con:
+            con.execute(
+                f"UPDATE {_FILE_TABLES[kind]} SET status = 'failed', error = ? WHERE ific_no = ?",
+                (error, ific_no),
             )
 
     def reset_stale_downloading(self) -> int:
         with self._connect() as con:
-            return con.execute(
-                "UPDATE ific_files SET status = 'failed', error = 'interrupted by restart' "
-                "WHERE status = 'downloading'"
-            ).rowcount
+            return sum(
+                con.execute(
+                    f"UPDATE {table} SET status = 'failed', error = 'interrupted by restart' "
+                    "WHERE status = 'downloading'"
+                ).rowcount
+                for table in _FILE_TABLES.values()
+            )
 
     def get_ui_enabled(self) -> bool | None:
         value = self._get_kv(_UI_ENABLED_KEY)

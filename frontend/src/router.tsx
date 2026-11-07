@@ -4,6 +4,18 @@ import { THRESHOLD_RANGE, type StationsSearch } from '@/components/station-meta'
 import type { FilesTableView } from '@/components/files-table'
 import { PFD_FILTERS, type PfdFilter } from '@/components/risk-meta'
 import { RISK_SORT_RE } from '@/components/risk-table'
+import {
+  ADM_RE,
+  CRITERION_RE,
+  MAX_ADMS,
+  MAX_Q,
+  TERRA_CHANGES,
+  TERRA_OUTCOMES,
+  TERRA_STATUSES,
+  type TerraChangeFilter,
+  type TerraSearch,
+  type TerraStatusFilter,
+} from '@/components/terra-meta'
 import type { FileStatus, OrbitType, Outcome } from '@/lib/api'
 import { NotFound } from '@/pages/not-found'
 import { OverviewPage } from '@/pages/overview'
@@ -109,8 +121,51 @@ const stationsRoute = createRoute({
   },
 })
 
+/** A comma-separated list (or a JSON-parsed array) reduced to its valid, distinct items; empty means absent. */
+function asList(value: unknown, keep: (item: string) => string | undefined, max = Infinity): string[] | undefined {
+  const raw = Array.isArray(value) ? value : typeof value === 'string' || typeof value === 'number' ? String(value).split(',') : []
+  const items = [...new Set(raw.flatMap((item) => keep(String(item).trim()) ?? []))].slice(0, max)
+  return items.length ? items : undefined
+}
+
+const oneOf = <T extends string>(values: readonly T[], value: unknown) =>
+  values.includes(value as T) ? (value as T) : undefined
+
+const asAdm = (value: unknown) => {
+  const adm = typeof value === 'string' ? value.trim().toUpperCase() : ''
+  return ADM_RE.test(adm) ? adm : undefined
+}
+
+const terrestrialRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/terrestrial',
+  // The map tab pulls in MapLibre, so the page loads on first visit.
+  component: lazyRouteComponent(() => import('@/pages/terrestrial'), 'TerrestrialPage'),
+  validateSearch: (search: Record<string, unknown>): TerraSearch => {
+    const outcome = asList(search.outcome, (o) => oneOf(TERRA_OUTCOMES, o))
+    const trendIssues = asList(search.trend_issues, (n) => (asId(n) != null ? String(asId(n)) : undefined))
+    const criterion = asText(search.criterion)
+    const q = asText(search.q)?.trim()
+    return {
+      issue: asId(search.issue),
+      // Kept in the API's outcome order so the same filter always has the same URL.
+      outcome: outcome && TERRA_OUTCOMES.filter((o) => outcome.includes(o)).join(','),
+      adm: asList(search.adm, asAdm, MAX_ADMS)?.join(','),
+      change: oneOf<TerraChangeFilter>(TERRA_CHANGES, search.change),
+      status: oneOf<TerraStatusFilter>(TERRA_STATUSES, search.status),
+      relevant: search.relevant === 'all' ? 'all' : undefined,
+      criterion: criterion && CRITERION_RE.test(criterion) ? criterion : undefined,
+      q: q ? q.slice(0, MAX_Q) : undefined,
+      ntc: asId(search.ntc),
+      tab: search.tab === 'map' || search.tab === 'trends' ? search.tab : undefined,
+      trend_issues: trendIssues?.map(Number).sort((a, b) => a - b).join(','),
+      draft: asAdm(search.draft),
+    }
+  },
+})
+
 export const router = createRouter({
-  routeTree: rootRoute.addChildren([overviewRoute, sourcesRoute, riskRoute, stationsRoute]),
+  routeTree: rootRoute.addChildren([overviewRoute, sourcesRoute, riskRoute, stationsRoute, terrestrialRoute]),
   defaultPreload: 'intent',
   scrollRestoration: true,
 })

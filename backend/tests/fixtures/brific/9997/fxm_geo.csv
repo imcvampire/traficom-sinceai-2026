@@ -1,0 +1,12 @@
+geo_key,geo_type,ctry,site_name,zone_id,radius,d_updated,src_update,longitude_dms,latitude_dms,seconds_in_use,long_dec,lat_dec,site_alt
+1,POINT,RUS,LEN SLANCY,,,,,,,,28.1952777777778,59.1125,62
+2,POINT,RUS,VYBORG,,,,,,,,28.75,60.71,20
+3,POINT,EST,TALLINN,,,,,,,,24.7536,59.437,20
+4,POINT,RUS,ST PETERSBURG,,,,,,,,30.3351,59.9343,20
+5,POINT,CHN,HARBIN SOUTH,,,,,,,,125.0,46.0,20
+6,POINT,RUS,MURMANSK,,,,,,,,33.08,68.97,20
+7,POINT,FIN,HELSINKI,,,,,,,,24.94,60.17,20
+8,POINT,RUS,VYBORG N,,,,,,,,28.8,60.75,20
+9,POINT,RUS,SESTRORETSK,,,,,,,,29.96,60.09,20
+10,POINT,NOR,OSLO,,,,,,,,10.75,59.91,20
+11,POINT,EST,PARNU,,,,,,,,24.497,58.385,20

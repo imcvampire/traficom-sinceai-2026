@@ -1,4 +1,5 @@
-"""Scheduled ITU Space IFIC check: discover new issues, then download them one at a time."""
+"""Scheduled ITU IFIC check: discover new Space issues, then download them and their terrestrial BR IFIC
+extracts one at a time."""
 
 import asyncio
 import fcntl
@@ -8,21 +9,38 @@ import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import httpx2
 
 from ific import __version__
 from ific.config import Settings
-from ific.watcher.download import DownloadError, describe_error, download_and_extract
+from ific.watcher.download import (
+    DownloadError,
+    NotModified,
+    NotPublished,
+    describe_error,
+    download_and_extract,
+)
 from ific.watcher.source import IficListing, SourceLayoutError, parse_listings, parse_year_links
-from ific.watcher.store import CachedPage, RunOutcome, RunRow, RunTrigger, WatcherStore, utcnow
+from ific.watcher.store import (
+    CachedPage,
+    FileKind,
+    FileRow,
+    RunOutcome,
+    RunRow,
+    RunTrigger,
+    WatcherStore,
+    utcnow,
+)
 
 log = logging.getLogger("ific.watcher")
 
 USER_AGENT = f"ific-watcher/{__version__} (+Traficom hackathon)"
 YEAR_PAGES_SCANNED = 2
+# Terrestrial issues are derived from Space issues published within this window ("the last 12 months").
+TERRESTRIAL_WINDOW = timedelta(days=365)
 
 ClientFactory = Callable[[], httpx2.AsyncClient]
 
@@ -43,6 +61,8 @@ class WatcherState:
     interval_seconds: int
     running: bool
     source_url: str
+    terrestrial_enabled: bool
+    terrestrial_source_url: str
     last_run: RunRow | None
     next_run_at: datetime | None
 
@@ -115,6 +135,8 @@ class WatcherService:
             interval_seconds=self.settings.watcher_interval_seconds,
             running=self.running,
             source_url=str(self.settings.watcher_source_url),
+            terrestrial_enabled=self.settings.terra_watcher_enabled,
+            terrestrial_source_url=str(self.settings.terra_source_page_url),
             last_run=self.store.last_run(),
             next_run_at=self._next_run_at if enabled and not self.running else None,
         )
@@ -210,46 +232,13 @@ class WatcherService:
             if not pages:
                 raise layout_errors[0]
             new_count = self.store.upsert_listings(pages[0], [x for xs in pages[1:] for x in xs])
-
-            downloaded = failed = 0
-            for row in self.store.pending_downloads():
-                if trigger == "schedule" and not self.is_enabled():
-                    log.info("watcher paused; remaining downloads wait for the next run")
-                    break
-                self.store.mark_downloading(row.ific_no)
-                started = time.monotonic()
-                try:
-                    result = await download_and_extract(
-                        client,
-                        IficListing(row.ific_no, row.published_on, row.zip_url),
-                        self.settings.watcher_download_dir,
-                        self.settings.watcher_max_download_bytes,
-                    )
-                except Exception as e:
-                    failed += 1
-                    error = str(e) if isinstance(e, DownloadError) else describe_error(e)
-                    self.store.mark_failed(row.ific_no, error)
-                    log.warning("watcher download failed ific=%d error=%s", row.ific_no, error)
-                    continue
-                except BaseException:
-                    self.store.mark_failed(row.ific_no, "interrupted")
-                    raise
-                downloaded += 1
-                self.store.mark_downloaded(
-                    row.ific_no,
-                    size_bytes=result.mdb_bytes,
-                    sha256=result.sha256,
-                    mdb_path=result.mdb_paths[0],
-                    etag=result.etag,
-                    last_modified=result.last_modified,
-                )
-                log.info(
-                    "watcher downloaded ific=%d zip_bytes=%d mdb_bytes=%d duration_ms=%d",
-                    row.ific_no,
-                    result.zip_bytes,
-                    result.mdb_bytes,
-                    (time.monotonic() - started) * 1000,
-                )
+            downloaded, failed = await self._download_rows(
+                client, "space", self.store.pending_downloads("space"), trigger
+            )
+            if self.settings.terra_watcher_enabled:
+                terra_downloaded, terra_failed = await self._check_terrestrial(client, trigger)
+                downloaded += terra_downloaded
+                failed += terra_failed
         return CheckResult(
             "ok",
             new_count=new_count,
@@ -257,6 +246,99 @@ class WatcherService:
             failed_count=failed,
             error=f"{failed} download(s) failed" if failed else None,
         )
+
+    async def _check_terrestrial(self, client: httpx2.AsyncClient, trigger: RunTrigger) -> tuple[int, int]:
+        """Fetch the BR IFIC extract for each recent Space issue; the terrestrial page is never scraped.
+
+        Downloaded rows are asked again with a conditional request, so a republished zip is picked up and
+        an unchanged one costs a 304. A 404 means the issue is not published yet and is not an error.
+        """
+        since = date.today() - TERRESTRIAL_WINDOW
+        added = self.store.derive_terrestrial(since, self.settings.terra_source_url_template)
+        if added:
+            log.info("watcher derived %d terrestrial issue(s)", added)
+        rows = [r for r in self.store.list_files("terrestrial") if r.published_on and r.published_on >= since]
+        return await self._download_rows(client, "terrestrial", rows, trigger)
+
+    async def _download_rows(
+        self, client: httpx2.AsyncClient, kind: FileKind, rows: list[FileRow], trigger: RunTrigger
+    ) -> tuple[int, int]:
+        if kind == "space":
+            dest_dir, prefix = self.settings.watcher_download_dir, "ific"
+        else:
+            dest_dir, prefix = self.settings.terra_download_dir, "brific"
+        downloaded = failed = 0
+        for row in rows:
+            if trigger == "schedule" and not self.is_enabled():
+                log.info("watcher paused; remaining downloads wait for the next run")
+                break
+            # A downloaded row is only re-validated: its status stays put unless a new file arrives.
+            recheck = row.status == "downloaded"
+            if not recheck:
+                self.store.mark_downloading(row.ific_no, kind)
+            on_disk = row.mdb_path is not None and Path(row.mdb_path).is_file()
+            started = time.monotonic()
+            try:
+                result = await download_and_extract(
+                    client,
+                    IficListing(row.ific_no, row.published_on, row.zip_url),
+                    dest_dir,
+                    self.settings.watcher_max_download_bytes,
+                    prefix=prefix,
+                    etag=row.etag if on_disk else None,
+                    last_modified=row.last_modified if on_disk else None,
+                )
+            except NotModified:
+                if not recheck:
+                    self.store.mark_unchanged(row.ific_no, kind)
+                continue
+            except NotPublished as e:
+                if kind == "terrestrial":
+                    if not recheck:
+                        self.store.mark_not_published(row.ific_no, kind)
+                    log.info("watcher %s issue not published yet ific=%d", kind, row.ific_no)
+                    continue
+                failed += 1
+                self._mark_failed(row, kind, str(e))
+                continue
+            except Exception as e:
+                error = str(e) if isinstance(e, DownloadError) else describe_error(e)
+                if recheck and on_disk:
+                    # The file on disk is still good; a failed re-validation is retried on the next run.
+                    log.warning(
+                        "watcher re-check of %s ific=%d failed, file kept: %s", kind, row.ific_no, error
+                    )
+                    continue
+                failed += 1
+                self._mark_failed(row, kind, error)
+                continue
+            except BaseException:
+                if not recheck:
+                    self.store.mark_failed(row.ific_no, "interrupted", kind)
+                raise
+            downloaded += 1
+            self.store.mark_downloaded(
+                row.ific_no,
+                size_bytes=result.mdb_bytes,
+                sha256=result.sha256,
+                mdb_path=result.mdb_paths[0],
+                etag=result.etag,
+                last_modified=result.last_modified,
+                kind=kind,
+            )
+            log.info(
+                "watcher downloaded %s ific=%d zip_bytes=%d mdb_bytes=%d duration_ms=%d",
+                kind,
+                row.ific_no,
+                result.zip_bytes,
+                result.mdb_bytes,
+                (time.monotonic() - started) * 1000,
+            )
+        return downloaded, failed
+
+    def _mark_failed(self, row: FileRow, kind: FileKind, error: str) -> None:
+        self.store.mark_failed(row.ific_no, error, kind)
+        log.warning("watcher download failed %s ific=%d error=%s", kind, row.ific_no, error)
 
     async def _fetch_page(self, client: httpx2.AsyncClient, url: str) -> str:
         cached = self.store.get_page(url)

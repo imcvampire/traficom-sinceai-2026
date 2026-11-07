@@ -1,0 +1,59 @@
+{
+  "cite": "Regulatory frameworks attached to terrestrial land mobile findings: ITU Radio Regulations, the GE06 Regional Agreement, CEPT/ECC applicability per administration, and Finnish national rules.",
+  "review": {
+    "status": "to_confirm",
+    "note": "Publication-part meanings and ECC applicability per administration are to be confirmed with the Traficom specialists. Bilateral agreements are not in the repository; their content is never looked up, only named.",
+    "date": "2026-11-07"
+  },
+  "rr_edition": "Radio Regulations, Edition of 2024",
+  "rr_provisions": {
+    "RR11.2": {"label": "Notification of a transmitting station for recording in the MIFR", "cite": "RR No. 11.2"},
+    "RR11.9": {"label": "Notification of a receiving land station for recording in the MIFR", "cite": "RR No. 11.9"},
+    "RR11.17": {"label": "Notification of a typical station", "cite": "RR No. 11.17"},
+    "RR6.7": {"label": "Coordination agreement reported by the notifying administration", "cite": "RR No. 6.7"},
+    "GE06-4.2": {"label": "GE06 Article 4 procedure for modifications to the Plan or other primary terrestrial services", "cite": "GE06 Agreement, Article 4 (No. 4.2)"},
+    "REV_BR": {"label": "Entry revised by the Bureau", "cite": "BR IFIC Preface (terrestrial)"}
+  },
+  "publication_parts": {
+    "status": "to_confirm",
+    "source": "BR IFIC (Terrestrial Services) Preface; meanings inferred from 3075-3077 and to be confirmed",
+    "parts": {
+      "1": {"status": "received", "label": "Part I: notice received and published for information"},
+      "2": {"status": "recorded", "label": "Part II: recorded in the MIFR with the Bureau's findings"},
+      "3": {"status": "returned", "label": "Part III: returned to the notifying administration"}
+    }
+  },
+  "ge06": {
+    "applies_when": "notice_typ starts with 'G' or prov starts with 'GE06-'",
+    "cite": "Regional Agreement GE06 (Geneva, 2006), Article 4: procedure for modifications to the Plan and coordination of other primary terrestrial services",
+    "url": null
+  },
+  "ecc_applicability": {
+    "default": {"status": "unknown", "reason": "CEPT membership and adoption of the ECC Recommendation not recorded for this administration", "governing": null},
+    "by_adm": {
+      "RUS": {"status": "indicative", "reason": "CEPT membership suspended (user-confirmed 2026-11-07); the bilateral agreement text is not in the repository", "governing": "FIN–RUS bilateral frequency coordination agreement"},
+      "EST": {"status": "applicable", "reason": "CEPT member", "governing": null},
+      "S": {"status": "applicable", "reason": "CEPT member", "governing": null},
+      "NOR": {"status": "applicable", "reason": "CEPT member", "governing": null},
+      "LVA": {"status": "applicable", "reason": "CEPT member", "governing": null},
+      "LTU": {"status": "applicable", "reason": "CEPT member", "governing": null},
+      "POL": {"status": "applicable", "reason": "CEPT member", "governing": null},
+      "DNK": {"status": "applicable", "reason": "CEPT member", "governing": null},
+      "D": {"status": "applicable", "reason": "CEPT member", "governing": null}
+    }
+  },
+  "national": {
+    "m4": {
+      "cite": "Traficom Regulation M4 on frequency allocation (Finlex, Traficom 2026/3)",
+      "url": null,
+      "edition_from": "ref.source m4_regulation edition (the loaded M4 PDF)"
+    },
+    "allocation_table": {
+      "cite": "Traficom frequency allocation table (Taajuusjakotaulukko), opendata.traficom.fi, loaded as ref.m4_allocation",
+      "url": "https://opendata.traficom.fi/"
+    }
+  },
+  "bilateral": {
+    "cite": "Bilateral and multilateral frequency coordination agreements (FIN–RUS, FIN–EST, Nordic) override the indicative ECC criteria; their contents are not in the repository (assumption A-T-BILATERAL)."
+  }
+}

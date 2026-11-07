@@ -17,7 +17,18 @@ import {
   listStations,
   polishDraft,
   setWatcherEnabled,
+  assessTerraIssue,
+  getTerraAssignment,
+  getTerraDraft,
+  getTerraModel,
+  getTerraTrends,
+  listTerraAssignments,
+  listTerraDrafts,
+  listTerraIssues,
+  polishTerraDraft,
   type IssueOut,
+  type TerraAssignmentFilters,
+  type TerraIssueOut,
   type NoticeView,
   type StationTimePct,
   type WatcherState,
@@ -30,11 +41,15 @@ export const queryKeys = {
   health: ['health'] as const,
   watcher: ['watcher'] as const,
   files: ['watcher', 'files'] as const,
+  terrestrialFiles: ['watcher', 'files', 'terrestrial'] as const,
   riskIssues: ['risk', 'issues'] as const,
   riskModel: ['risk', 'model'] as const,
   riskChat: ['risk', 'chat'] as const,
   riskNotices: (ificNo: number) => ['risk', 'issues', ificNo, 'notices'] as const,
   stations: ['stations'] as const,
+  terraIssues: ['terrestrial', 'issues'] as const,
+  terraModel: ['terrestrial', 'model'] as const,
+  terraIssue: (ificNo: number) => ['terrestrial', 'issues', ificNo] as const,
 }
 
 export const healthQuery = queryOptions({
@@ -51,7 +66,13 @@ export const watcherQuery = queryOptions({
 
 export const filesQuery = queryOptions({
   queryKey: queryKeys.files,
-  queryFn: listFiles,
+  queryFn: () => listFiles('space'),
+  refetchInterval: POLL_MS,
+})
+
+export const terrestrialFilesQuery = queryOptions({
+  queryKey: queryKeys.terrestrialFiles,
+  queryFn: () => listFiles('terrestrial'),
   refetchInterval: POLL_MS,
 })
 
@@ -178,6 +199,83 @@ export function useCheckNow() {
       else toast.error('Check failed to start', { description: errorText(err) })
     },
     onSettled: () => client.invalidateQueries({ queryKey: queryKeys.watcher }),
+  })
+}
+
+export const terraIssuesQuery = queryOptions({
+  queryKey: queryKeys.terraIssues,
+  queryFn: listTerraIssues,
+  refetchInterval: (query) =>
+    query.state.data?.some((issue) => issue.job.status === 'running') ? POLL_RUNNING_MS : POLL_MS,
+})
+
+export const terraModelQuery = queryOptions({
+  queryKey: queryKeys.terraModel,
+  queryFn: getTerraModel,
+  staleTime: Infinity,
+})
+
+const notFound = (count: number, err: unknown) => !(err instanceof ApiError && err.status === 404) && count < 1
+
+// `assessedAt` is part of every key below, so a finished re-assessment fetches fresh results.
+export const terraAssignmentsQuery = (ificNo: number, filters: TerraAssignmentFilters, assessedAt: string | null) =>
+  queryOptions({
+    queryKey: [...queryKeys.terraIssue(ificNo), 'assignments', { filters, assessedAt }] as const,
+    queryFn: () => listTerraAssignments(ificNo, filters),
+    placeholderData: keepPreviousData,
+  })
+
+export const terraAssignmentQuery = (ificNo: number, terrakey: number, assessedAt: string | null) =>
+  queryOptions({
+    queryKey: [...queryKeys.terraIssue(ificNo), 'assignment', terrakey, { assessedAt }] as const,
+    queryFn: () => getTerraAssignment(ificNo, terrakey),
+    retry: notFound,
+  })
+
+export const terraTrendsQuery = (ificNo: number, issues: readonly number[], assessedAt: string | null) =>
+  queryOptions({
+    queryKey: [...queryKeys.terraIssue(ificNo), 'trends', { issues, assessedAt }] as const,
+    queryFn: () => getTerraTrends(ificNo, issues),
+    placeholderData: keepPreviousData,
+  })
+
+export const terraDraftsQuery = (ificNo: number, assessedAt: string | null) =>
+  queryOptions({
+    queryKey: [...queryKeys.terraIssue(ificNo), 'drafts', { assessedAt }] as const,
+    queryFn: () => listTerraDrafts(ificNo),
+    retry: notFound,
+  })
+
+// A 409 (no concern to describe) and a 404 are answers, not failures to retry.
+export const terraDraftQuery = (ificNo: number, adm: string, assessedAt: string | null) =>
+  queryOptions({
+    queryKey: [...queryKeys.terraIssue(ificNo), 'draft', adm, { assessedAt }] as const,
+    queryFn: () => getTerraDraft(ificNo, adm),
+    retry: (count, err) => !(err instanceof ApiError && [404, 409].includes(err.status)) && count < 1,
+  })
+
+export function useAssessTerraIssue() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (ificNo: number) => assessTerraIssue(ificNo),
+    onSuccess: ({ job }, ificNo) => {
+      client.setQueryData<TerraIssueOut[]>(queryKeys.terraIssues, (issues) =>
+        issues?.map((issue) => (issue.ific_no === ificNo ? { ...issue, job } : issue)),
+      )
+      toast.info(`Assessing BR IFIC ${ificNo}`, { description: 'Progress updates every few seconds.' })
+    },
+    onError: (err, ificNo) => {
+      if (err instanceof ApiError && err.status === 409)
+        toast.warning(`BR IFIC ${ificNo} is already being assessed`, { description: err.message })
+      else toast.error(`Could not assess BR IFIC ${ificNo}`, { description: errorText(err) })
+    },
+    onSettled: () => client.invalidateQueries({ queryKey: queryKeys.terraIssues, exact: true }),
+  })
+}
+
+export function usePolishTerraDraft() {
+  return useMutation({
+    mutationFn: ({ ificNo, adm }: { ificNo: number; adm: string }) => polishTerraDraft(ificNo, adm),
   })
 }
 

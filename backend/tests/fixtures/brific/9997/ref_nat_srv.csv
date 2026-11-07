@@ -1,0 +1,19 @@
+nat_srv,description
+AS,Adaptive System
+AX,Fixed station used for provision of services related to aircraft flight safety
+CO,Station open to official correspondence exclusively
+CP,Station open to public correspondence
+CR,Station open to limited public correspondence
+CV,Station open exclusively to correspondence of a private agency
+FS,Land station established solely for the safety of life
+HP,Fixed station using high altitude platform
+IM,IMT station in the mobile service
+MX,Fixed station used for transmission of meteorological information
+OT,Station open exclusively to operational traffic of the service concerned
+PX,Fixed station used for press transmission
+RC,Non-directional radiobeacon
+RD,Directional radiobeacon
+RG,Radio direction-finding station
+RT,Revolving radiobeacon
+SP,Station for passive use in the meteorological aids service
+ST,Fixed station using tropospheric scatter

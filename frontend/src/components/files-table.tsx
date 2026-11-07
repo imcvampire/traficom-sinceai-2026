@@ -151,9 +151,16 @@ type FilesTableProps = {
   isPending: boolean
   view: FilesTableView
   onViewChange: (view: FilesTableView) => void
+  emptyMessage?: string
 }
 
-export function FilesTable({ files, isPending, view, onViewChange }: FilesTableProps) {
+export function FilesTable({
+  files,
+  isPending,
+  view,
+  onViewChange,
+  emptyMessage = 'No IFIC issues discovered yet. Run a check to scan the ITU source.',
+}: FilesTableProps) {
   const now = useNow()
   const columns = useColumns(now)
   const data = useMemo(() => files ?? [], [files])
@@ -310,7 +317,7 @@ export function FilesTable({ files, isPending, view, onViewChange }: FilesTableP
                       </Button>
                     </div>
                   ) : (
-                    'No IFIC issues discovered yet. Run a check to scan the ITU source.'
+                    emptyMessage
                   )}
                 </TableCell>
               </TableRow>

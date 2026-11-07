@@ -33,7 +33,7 @@ running, because DuckDB allows one writer. Stop the server first, or trigger an 
 
 ### Data and storage
 
-One DuckDB file (`var/db/ific.duckdb`) with three schemas, created in `backend/src/ific/db.py`:
+One DuckDB file (`var/db/ific.duckdb`) with four schemas, created in `backend/src/ific/db.py`:
 
 - `ref`: reference data loaded at API startup (`m4.ensure_m4`, `special_interest.ensure_special_interest`),
   tracked by sha256 in `ref.source` so unchanged inputs are not reloaded.
@@ -41,16 +41,22 @@ One DuckDB file (`var/db/ific.duckdb`) with three schemas, created in `backend/s
   is a no-op when the file's sha256 and the table set (`ingest.TABLES`, recorded in `space.issue.filters`) are
   unchanged, so adding a table re-loads existing issues. The schema is `space`, not `ific`, because `ific` would be
   ambiguous with the catalog name.
-- `analytics`: derived `risk_*` tables written by `riia/store.py`, keyed by `(ific_no, receiver_source)`; one
-  transaction replaces an issue's whole assessment.
+- `terra`: terrestrial BR IFIC tables (`ingest.TERRA_TABLES`: `fxm_*`, GE06 and the issue's own `ref_*` code
+  tables) from `brific<no>.mdb`, tagged with `ific_no`, with the same no-op rule (`terra.issue`).
+- `analytics`: derived `risk_*` tables written by `riia/store.py`, keyed by `(ific_no, receiver_source)`, and
+  `terra_*` tables written by `terra/store.py`, keyed by `ific_no`; one transaction replaces an issue's whole
+  assessment.
 
 Issue discovery looks in `data/ific/<no>/ific<no>.mdb` (watcher downloads) first, then `ific<no>.mdb` in the repo
-root. `brific*.mdb` files are terrestrial issues and are ignored. Hand-curated inputs with citations live in
-`data/ref/` (`receiver_classes.json`, `rr_comment_windows.json`, `rr21_pfd_limits.json`, `finland_land.geojson`).
+root. Terrestrial discovery (`discover_terra_issues`) looks in `data/brific/<no>/brific<no>.mdb` first, then the
+repo root. Hand-curated inputs with citations live in `data/ref/` (`receiver_classes.json`,
+`rr_comment_windows.json`, `rr21_pfd_limits.json`, `finland_land.geojson`, and the terrestrial
+`terrestrial_criteria.json`, `terrestrial_frameworks.json`, `terrestrial_letter_kinds.json`, `region_land.geojson`).
 
-The FastAPI `lifespan` in `api.py` opens the single connection, loads reference data, starts the risk `JobRunner`
-and the hourly source watcher (`watcher/`, off with `IFIC_WATCHER_ENABLED=false`). Request handlers get a per-request
-`con.cursor()` through `get_db`. Settings come from `IFIC_*` env vars or the root `.env` (`config.py`).
+The FastAPI `lifespan` in `api.py` opens the single connection, loads reference data, starts the risk and
+terrestrial job runners (both on the shared `ific/jobs.py` runner) and the hourly source watcher (`watcher/`, off
+with `IFIC_WATCHER_ENABLED=false`; terrestrial downloads off with `IFIC_TERRA_WATCHER_ENABLED=false`). Request
+handlers get a per-request `con.cursor()` through `get_db`. Settings come from `IFIC_*` env vars or the root `.env` (`config.py`).
 
 ### Risk model (`backend/src/ific/riia/`, model `riia-1`)
 
@@ -93,6 +99,18 @@ streamed by `llm.py`. It must keep the no-score rule: no `score` key, no ranking
 Draft letters (`riia/draft.py`) are built on demand and never stored. Their kind comes from the regulatory context,
 never from the LLM. The LLM polish rewrites the body paragraphs only, and `check_polish` rejects any change to the
 protected tokens. Station ids, coordinates and azimuths go in the reviewer notes, never in the letter.
+
+### Terrestrial model (`backend/src/ific/terra/`, model `terra-1`)
+
+The method is specified in `docs/terrestrial-land-mobile.md`, the source of truth. It assesses foreign land mobile
+assignments (FB/ML) of one terrestrial issue at a time: every query filters on that issue's `ific_no`, with no join
+across issues. `inventory.py` gives the change class (`new`/`modified` with a field diff/`withdrawn`) and the
+publication status from the issue's own `fxm_pub_hist`; `relevance.py` is Tier 0; `regulatory.py` attaches RR, GE06,
+the ECC criterion with per-administration applicability (`indicative` for RUS), M4 and the bilateral basis;
+`hazards.py` runs a deterministic Tier 1 all-sea bound and Tier 2 mixed-path P.1546 at Finnish border points;
+`trends.py`, `draft.py` and `export.py` work from stored results. It keeps the `riia-1` invariants: no score,
+byte-identical JSON, and stored P.1546 inputs that reproduce E. Draft helpers shared with `riia/draft.py` live in
+`ific/drafting.py`. The API is the `/api/terrestrial` router in `terra/api.py`; the UI is `/terrestrial`.
 
 `propagation/` (ITU-R P.1546 field strength and T/R 25-08 triggers) and `stations.py` serve the `/stations` map. They
 are separate from the space risk model.

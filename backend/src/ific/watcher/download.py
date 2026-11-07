@@ -1,4 +1,4 @@
-"""Stream one IFIC zip to disk, verify it, and extract its .mdb members safely."""
+"""Stream one IFIC or BR IFIC zip to disk, verify it, and extract its .mdb members safely."""
 
 import asyncio
 import hashlib
@@ -19,6 +19,14 @@ _CHUNK = 1 << 20
 
 class DownloadError(Exception):
     """A single IFIC file could not be downloaded or extracted; other files are unaffected."""
+
+
+class NotPublished(DownloadError):
+    """The server answered 404. For a derived terrestrial URL this means the issue is not out yet."""
+
+
+class NotModified(Exception):
+    """The server answered 304 to a conditional request: the file already on disk is current."""
 
 
 def describe_error(e: BaseException) -> str:
@@ -49,7 +57,7 @@ def _safe_member_name(info: zipfile.ZipInfo) -> str:
     return path.name
 
 
-def _extract_mdbs(zip_path: Path, dest: Path, ific_no: int, max_bytes: int) -> list[Path]:
+def _extract_mdbs(zip_path: Path, dest: Path, single_name: str, max_bytes: int) -> list[Path]:
     try:
         with zipfile.ZipFile(zip_path) as zf:
             members = [i for i in zf.infolist() if not i.is_dir() and i.filename.lower().endswith(".mdb")]
@@ -57,7 +65,7 @@ def _extract_mdbs(zip_path: Path, dest: Path, ific_no: int, max_bytes: int) -> l
                 raise DownloadError("zip contains no .mdb file")
             names = [_safe_member_name(i) for i in members]
             if len(names) == 1:
-                names = [f"ific{ific_no}.mdb"]
+                names = [single_name]
             if len(set(names)) != len(names):
                 raise DownloadError("zip contains duplicate .mdb names")
             if sum(i.file_size for i in members) > max_bytes:
@@ -82,18 +90,39 @@ def _cleanup(dest: Path, zip_path: Path) -> None:
 
 
 async def download_and_extract(
-    client: httpx2.AsyncClient, listing: IficListing, dest_dir: Path, max_bytes: int
+    client: httpx2.AsyncClient,
+    listing: IficListing,
+    dest_dir: Path,
+    max_bytes: int,
+    *,
+    prefix: str = "ific",
+    etag: str | None = None,
+    last_modified: str | None = None,
 ) -> DownloadResult:
+    """Save `<dest_dir>/<no>/<prefix><no>.mdb`. With `etag` or `last_modified` the request is conditional.
+
+    Raises NotModified on 304, NotPublished on 404 and DownloadError on any other failure.
+    """
     dest = dest_dir / str(listing.ific_no)
-    dest.mkdir(parents=True, exist_ok=True)
-    zip_path = dest / f"ific{listing.ific_no}.zip"
-    zip_part = dest / f"ific{listing.ific_no}.zip.part"
+    zip_path = dest / f"{prefix}{listing.ific_no}.zip"
+    zip_part = dest / f"{prefix}{listing.ific_no}.zip.part"
+    headers: dict[str, str] = {}
+    if etag:
+        headers["If-None-Match"] = etag
+    if last_modified:
+        headers["If-Modified-Since"] = last_modified
     try:
         digest = hashlib.sha256()
         received = 0
-        async with client.stream("GET", listing.zip_url) as response:
+        async with client.stream("GET", listing.zip_url, headers=headers) as response:
+            if response.status_code == 304 and headers:
+                raise NotModified(listing.zip_url)
+            if response.status_code == 404:
+                raise NotPublished(f"HTTP 404 for {listing.zip_url}")
             if response.status_code != 200:
                 raise DownloadError(f"HTTP {response.status_code} for {listing.zip_url}")
+            # Created only once there is a body, so a 304 or 404 leaves no empty directory behind.
+            dest.mkdir(parents=True, exist_ok=True)
             declared = response.headers.get("content-length")
             # A content-encoded body is decoded on read, so its length is not comparable to the header.
             encoded = response.headers.get("content-encoding", "identity") != "identity"
@@ -113,7 +142,7 @@ async def download_and_extract(
             raise DownloadError(f"size mismatch: received {received} of {expected} bytes")
         zip_part.replace(zip_path)
         extraction = asyncio.ensure_future(
-            asyncio.to_thread(_extract_mdbs, zip_path, dest, listing.ific_no, max_bytes)
+            asyncio.to_thread(_extract_mdbs, zip_path, dest, f"{prefix}{listing.ific_no}.mdb", max_bytes)
         )
         try:
             mdb_paths = await asyncio.shield(extraction)
@@ -131,6 +160,8 @@ async def download_and_extract(
             etag=etag,
             last_modified=last_modified,
         )
+    except NotModified:
+        raise
     except DownloadError:
         _cleanup(dest, zip_path)
         raise

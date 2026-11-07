@@ -22,6 +22,16 @@ class Settings(BaseSettings):
     watcher_state_path: Path = PROJECT_ROOT / "var" / "db" / "watcher.sqlite3"
     watcher_http_timeout_seconds: float = Field(60.0, gt=0)
     watcher_max_download_bytes: int = Field(2_000_000_000, gt=0)
+    # Terrestrial BR IFIC extracts: the zip URL is built from the issue number, the page is never scraped.
+    terra_download_dir: Path = PROJECT_ROOT / "data" / "brific"
+    terra_watcher_enabled: bool = True
+    # Human-facing page of the terrestrial BR IFIC, linked from the UI; the watcher never fetches it.
+    terra_source_page_url: HttpUrl = HttpUrl(
+        "https://www.itu.int/en/ITU-R/terrestrial/brific/Pages/default.aspx"
+    )
+    terra_source_url_template: str = (
+        "https://www.itu.int/en/ITU-R/terrestrial/brific/BRIFIC/MDB/brific{no}.zip"
+    )
 
     # OpenAI-compatible chat completions API; the default endpoint is Featherless (https://featherless.ai).
     llm_api_key: SecretStr | None = None
@@ -35,7 +45,7 @@ class Settings(BaseSettings):
     def _blank_as_unset(cls, value: object) -> object:
         return None if isinstance(value, str) and not value.strip() else value
 
-    @field_validator("watcher_download_dir", "watcher_state_path")
+    @field_validator("watcher_download_dir", "watcher_state_path", "terra_download_dir")
     @classmethod
     def _resolve_against_project_root(cls, path: Path) -> Path:
         return path if path.is_absolute() else PROJECT_ROOT / path

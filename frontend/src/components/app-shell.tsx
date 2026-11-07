@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link, Outlet, useRouterState } from '@tanstack/react-router'
-import { LayoutDashboard, MapPin, Radar, Satellite, ShieldAlert } from 'lucide-react'
+import { LayoutDashboard, MapPin, Radar, RadioTower, Satellite, ShieldAlert } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 import {
   Sidebar,
@@ -24,15 +24,17 @@ import { ThemeToggle } from './theme-toggle'
 
 const NAV = [
   { to: '/', label: 'Overview', icon: LayoutDashboard },
-  { to: '/sources', label: 'Space IFIC sources', icon: Satellite },
+  { to: '/sources', label: 'IFIC watcher', icon: Satellite },
   { to: '/risk', label: 'Interference risk', icon: ShieldAlert },
+  { to: '/terrestrial', label: 'Terrestrial land mobile', icon: RadioTower },
   { to: '/stations', label: 'Stations map', icon: MapPin },
 ] as const
 
 const PAGE_TITLES: Record<string, string> = {
   '/': 'Overview',
-  '/sources': 'Space IFIC sources',
+  '/sources': 'IFIC watcher',
   '/risk': 'Interference risk',
+  '/terrestrial': 'Terrestrial land mobile',
   '/stations': 'Stations map',
 }
 

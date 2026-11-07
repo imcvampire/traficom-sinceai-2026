@@ -6,7 +6,7 @@ import duckdb
 def connect(path: Path, storage_version: str) -> duckdb.DuckDBPyConnection:
     path.parent.mkdir(parents=True, exist_ok=True)
     con = duckdb.connect(str(path), config={"storage_compatibility_version": storage_version})
-    for schema in ("ref", "space", "analytics"):
+    for schema in ("ref", "space", "terra", "analytics"):
         con.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
     con.execute(
         """

@@ -128,17 +128,15 @@ T/R 25-08 trigger where one exists, and the request's `threshold_dbuv` otherwise
 The radius results are cached per physical input, so a data reload cannot serve stale values. The first full list
 of 873 stations takes about 0.14 s.
 
-## Calling them from the terrestrial side quest
+## Use in the terrestrial assessment
 
-The side quest needs the field strength a foreign land-mobile notice causes at the Finnish border:
-
-1. Build the path from the foreign transmitter to the border point, or to a Finnish station.
-2. Split the path into `land`, `sea_cold` and `sea_warm` zones with a coastline mask. This is still a follow-up.
-3. Derive `h1` per Annex 5 §3. Use terrain if available; otherwise use the flat assumption, as the map does.
-4. Call `p1546.field_strength(f, tr2508.TIME_PCT, path, h1, h2_m=tr2508.RX_HEIGHT_M, erp_dbw=..., loc_pct=tr2508.LOC_PCT)`.
-5. Compare the result with `tr2508.trigger(f, bandwidth_hz).e_dbuv_m`.
+The terrestrial land mobile model `terra-1` ([terrestrial-land-mobile.md](terrestrial-land-mobile.md)) consumes both
+modules. `ific.terra.refdata` builds the `tr-25-08` criterion from `tr2508.TRIGGERS`, so those values are not copied.
+`ific.terra.hazards` builds mixed land/sea paths from a Natural Earth 1:10m land mask (`data/ref/region_land.geojson`),
+takes `h1` as the antenna height above ground over flat terrain, and calls `p1546.field_strength` at each criterion's
+time %, location % and receiving height. Each finding stores the inputs, so `terra.hazards.reproduce` can re-run them.
 
 Follow-ups shared with the map:
 - terrain-based `h1` and the terrain clearance angle, from a DEM;
-- the coastline mask;
+- the coastline mask for the station map (the terrestrial model has its own, `region_land.geojson`);
 - antenna patterns (ITU-R F.699/F.1245).

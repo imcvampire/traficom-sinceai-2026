@@ -62,30 +62,40 @@ into DuckDB at `var/db/ific.duckdb`, and starts the source watcher.
 The analyser looks for Space IFIC databases in two places, in this order:
 
 1. `data/ific/<ific_no>/ific<no>.mdb`, which is where the watcher saves downloads.
-2. `ific<no>.mdb` in the repository root, for files you place there manually. `brific*.mdb` files are terrestrial
-   issues and are ignored.
+2. `ific<no>.mdb` in the repository root, for files you place there manually.
 
-`.mdb` files, `data/ific/` and `var/` are gitignored because they are large and can be downloaded again.
+Terrestrial BR IFIC issues (`brific<no>.mdb`) are looked up in `data/brific/<no>/` first, where the watcher saves
+them, then in the repository root. They load into the `terra` schema and are assessed by the terrestrial land mobile
+model; see [docs/terrestrial-land-mobile.md](docs/terrestrial-land-mobile.md).
+
+`.mdb` files, `data/ific/`, `data/brific/` and `var/` are gitignored because they are large and can be downloaded again.
 
 The **source watcher** checks the ITU download page every hour while the API runs. On its first run it downloads
-every issue on the newest year page, which is about 25 files and 3–7 GB once extracted. Set
+every issue on the newest year page, which is about 25 files and 3–7 GB once extracted. After each Space check
+it also downloads the terrestrial BR IFIC extracts of the last 12 months (about 22 files of 25–110 MB each). The
+terrestrial BR IFIC is a separate publication, but it uses the same issue numbers and dates, so the watcher takes
+the issue numbers from the Space listing. Set `IFIC_TERRA_WATCHER_ENABLED=false` to turn off only the terrestrial downloads, or
 `IFIC_WATCHER_ENABLED=false` in `.env` to turn it off. See [docs/source-watcher.md](docs/source-watcher.md) for its
 behaviour and every `IFIC_WATCHER_*` setting.
 
 ## CLI
 
 Run the CLI from `backend/` with `uv run ific <command>`, or from anywhere with `uv run --project backend ific`.
-`ISSUE` is an issue number or a path to an `ificNNNN.mdb` file.
+`ISSUE` is an issue number or a path to an `ificNNNN.mdb` file. `TISSUE` is a terrestrial issue: `tNNNN` or a
+path to a `brificNNNN.mdb` file.
 
 | Command | Purpose |
 |---|---|
 | `ific serve [--host] [--port] [--reload]` | Run the API server |
 | `ific watch check` | Run one watcher check now |
-| `ific ingest ISSUE` | Load an issue into DuckDB (no-op when unchanged) |
+| `ific ingest ISSUE\|TISSUE` | Load an issue into DuckDB (no-op when unchanged); terrestrial issues go into the `terra` schema |
 | `ific assess ISSUE [--as-of YYYY-MM-DD] [--source generic-m4\|stations] [--json PATH] [--consistency PATH] [--summary PATH]` | Assess every notice of an issue and store the results |
 | `ific review ISSUE --as-of YYYY-MM-DD [--out PATH]` | Write a concern-triage report (Markdown and CSV) from stored results |
 | `ific draft ISSUE --as-of YYYY-MM-DD [--ntc N]... [--out DIR]` | Write a draft letter to the notifying administration (Markdown, with internal reviewer notes) for each notice with a concern, from stored results; default `--out` is `plans/reports/drafts-ISSUE-AS_OF/` |
 | `ific assess-sensitivity ISSUE --as-of YYYY-MM-DD [--out PATH]` | Report which outcomes flip when assumptions move within their ranges |
+| `ific terra-assess TISSUE [--json PATH]` | Assess the foreign land mobile assignments of a terrestrial issue (`terra-1`) and store the results |
+| `ific terra-export TISSUE --out DIR` | Write `terra-NNNN.json`, `.csv` and `.md` from the stored terrestrial assessment |
+| `ific terra-draft TISSUE [--adm ADM]... [--out DIR]` | Write a draft letter per administration with concerns; default `--out` is `plans/reports/terra-drafts-NNNN/` |
 
 Example:
 
@@ -113,6 +123,10 @@ in reprs and logs; call `get_secret_value()` only where a request is built. Othe
 | `IFIC_DB_DIR` | `var/db` | Holds `ific.duckdb` |
 | `IFIC_DB_STORAGE_VERSION` | `v1.5.0` | Storage format for new DB files, kept readable by DuckDB 1.x GUI clients |
 | `IFIC_CORS_ORIGINS` | `["http://localhost:5173"]` | JSON list |
+| `IFIC_TERRA_DOWNLOAD_DIR` | `data/brific` | Where terrestrial issues are looked up and downloaded |
+| `IFIC_TERRA_WATCHER_ENABLED` | `true` | Download terrestrial extracts after each Space check |
+| `IFIC_TERRA_SOURCE_URL_TEMPLATE` | `https://www.itu.int/en/ITU-R/terrestrial/brific/BRIFIC/MDB/brific{no}.zip` | Built per issue number; the terrestrial page is never scraped |
+| `IFIC_TERRA_SOURCE_PAGE_URL` | `https://www.itu.int/en/ITU-R/terrestrial/brific/Pages/default.aspx` | Terrestrial BR IFIC page linked from the watcher panel; never fetched |
 | `IFIC_LLM_MAX_CONCURRENT` | `1` | Chat answers streamed at once; a request over the limit gets 429. A Featherless model with concurrency cost 4 uses 4 units of the plan per answer |
 
 The chat on `/risk` stays disabled until both `IFIC_LLM_API_KEY` and `IFIC_LLM_MODEL` are set. `GET /api/risk/chat`
@@ -133,5 +147,6 @@ Run a single test file with `cd backend && uv run pytest tests/test_m4.py -q`.
 
 - [docs/interference-risk-assessment.md](docs/interference-risk-assessment.md): the assessment method, its sources,
   and what is still unvalidated.
+- [docs/terrestrial-land-mobile.md](docs/terrestrial-land-mobile.md): the terrestrial land mobile method (`terra-1`).
 - [docs/source-watcher.md](docs/source-watcher.md): how the IFIC source watcher works and how to configure it.
 - [docs/frontend.md](docs/frontend.md): frontend stack, layout and URL parameters.

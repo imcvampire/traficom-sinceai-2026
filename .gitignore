@@ -4,6 +4,7 @@
 *.duckdb.wal
 var/
 data/ific/
+data/brific/
 
 # Python
 __pycache__/

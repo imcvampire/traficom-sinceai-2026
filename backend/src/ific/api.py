@@ -37,8 +37,10 @@ from ific.riia.schemas import (
     NoticeDetailOut,
     NoticeListOut,
 )
+from ific.terra import api as terra_api
+from ific.terra.jobs import TerraJobRunner
 from ific.watcher.service import WatcherService, WatcherState
-from ific.watcher.store import FileStatus, RunRow
+from ific.watcher.store import FileKind, FileStatus, RunRow
 
 chat_log = logging.getLogger("ific.chat")
 draft_log = logging.getLogger("ific.draft")
@@ -57,6 +59,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         ]
         app.state.db = con
         app.state.risk_jobs = JobRunner(con, GenericM4Population)
+        app.state.terra_jobs = TerraJobRunner(con)
         app.state.watcher = WatcherService(settings)
         if settings.watcher_enabled:
             watcher_task = asyncio.create_task(app.state.watcher.run_forever(), name="ific-watcher")
@@ -70,6 +73,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         finally:
             if hasattr(app.state, "risk_jobs"):
                 app.state.risk_jobs.shutdown()
+            if hasattr(app.state, "terra_jobs"):
+                app.state.terra_jobs.shutdown()
             con.close()
             if chat_client is not None:
                 await chat_client.aclose()
@@ -83,6 +88,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(stations.router)
+app.include_router(terra_api.router)
 
 
 def get_db(request: Request) -> Iterator[duckdb.DuckDBPyConnection]:
@@ -149,6 +155,8 @@ class WatcherStateOut(BaseModel):
     interval_seconds: int
     running: bool
     source_url: str
+    terrestrial_enabled: bool
+    terrestrial_source_url: str
     last_run: WatcherRunOut | None
     next_run_at: datetime | None
 
@@ -162,6 +170,8 @@ class WatcherStateOut(BaseModel):
             interval_seconds=state.interval_seconds,
             running=state.running,
             source_url=state.source_url,
+            terrestrial_enabled=state.terrestrial_enabled,
+            terrestrial_source_url=state.terrestrial_source_url,
             last_run=WatcherRunOut(**vars(run)) if run else None,
             next_run_at=state.next_run_at,
         )
@@ -196,7 +206,7 @@ def _display_path(path: str | None) -> str | None:
     if path is None:
         return None
     p = Path(path)
-    for base in (PROJECT_ROOT, settings.watcher_download_dir):
+    for base in (PROJECT_ROOT, settings.watcher_download_dir, settings.terra_download_dir):
         if p.is_relative_to(base):
             return p.relative_to(base).as_posix()
     return p.name
@@ -226,7 +236,10 @@ async def watcher_check(watcher: Watcher) -> dict[str, bool]:
 
 
 @app.get("/api/watcher/files")
-async def watcher_files(watcher: Watcher) -> list[WatcherFileOut]:
+async def watcher_files(
+    watcher: Watcher,
+    kind: Annotated[FileKind, Query(description="space (Space IFIC) or terrestrial (BR IFIC)")] = "space",
+) -> list[WatcherFileOut]:
     return [
         WatcherFileOut(
             ific_no=f.ific_no,
@@ -240,7 +253,7 @@ async def watcher_files(watcher: Watcher) -> list[WatcherFileOut]:
             discovered_at=f.discovered_at,
             downloaded_at=f.downloaded_at,
         )
-        for f in watcher.store.list_files()
+        for f in watcher.store.list_files(kind)
     ]
 
 

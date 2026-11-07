@@ -22,7 +22,7 @@ to start the API as well.
 - `src/components/`: the app shell (sidebar and header), watcher controls, files table, status badge and meter, and the
   theme provider and toggle.
 - `src/pages/`: `overview.tsx` (`/`), `sources.tsx` (`/sources?status=&q=&sort=`), `risk.tsx` (`/risk`),
-  `stations.tsx` (`/stations`) and the 404 page.
+  `terrestrial.tsx` (`/terrestrial`), `stations.tsx` (`/stations`) and the 404 page.
 
 ## `/risk` (interference risk)
 
@@ -83,6 +83,72 @@ Components: `risk-header.tsx` (issue picker, Assess button with 3 s job polling)
 `notice-sheet.tsx` (detail), `risk-chart.tsx` (inline-SVG likelihood–consequence chart), `hazard-inventory.tsx`,
 `risk-compare.tsx`, `risk-chat.tsx`, `notice-draft.tsx`, `outcome-badge.tsx` and `risk-meta.ts`. Chart series use the `--series-1..5` tokens, so the
 status tokens stay reserved for state.
+
+## `/terrestrial` (terrestrial land mobile)
+
+Expert review of one BR IFIC (terrestrial) issue: foreign land mobile assignments, their relevance to Finland and the
+ITU-R P.1546 field strength at the Finnish border against the coordination criterion of their band. It reads
+`/api/terrestrial/*` and never shows a composite score. The page is lazy-loaded because the map tab uses MapLibre.
+
+**URL params.** All state is in the URL, and invalid values are dropped (an invalid item of a list is dropped on its
+own). Lists are comma-separated.
+
+| Param | Values |
+|---|---|
+| `issue` | BR IFIC number; omitted means the latest assessed issue |
+| `outcome` | List of `exceeds`, `meets`, `screened_out`, `not_applicable`, `not_assessed`, kept in that API order |
+| `adm` | List of administration codes (1–3 letters, upper-cased, at most 8) |
+| `change` | `new`, `modified` or `withdrawn` |
+| `status` | Publication status `received`, `recorded` or `returned` (sent to the API as `pub_status`) |
+| `relevant` | `all` includes the non-relevant rows for false-negative review; omitted means relevant only |
+| `criterion` | Criterion id, for example `tr-25-08` |
+| `q` | Free text (at most 80 characters) matched against `adm_ref_id`, site name or frequency |
+| `ntc` | `terrakey`; opens the evidence sheet |
+| `tab` | `map` or `trends`; omitted means the findings table |
+| `trend_issues` | List of other assessed issues summed into the trends panel |
+| `draft` | Administration code; opens its draft letter |
+
+**Header.** Issue picker, assessment state, and an Assess / Re-assess button (`POST /api/terrestrial/issues/{n}`,
+then `GET /issues` is polled every 3 s while the job runs; a 409 shows "already being assessed"). It lists the model
+and P.1546 versions and the criteria from `/model`, each with an "unverified" badge until its transcription is
+checked. The summary card counts every assignment of the issue by outcome; clicking an outcome toggles the `outcome`
+filter. The draft-letters card lists the administrations `/drafts` returns.
+
+**Findings table** (`terra-table.tsx`). Rows come in the server's order (outcome, FIN coordination required, margin,
+change, publication status) and the client never re-ranks them; 50 rows per page. **Download CSV** fetches
+`/assignments.csv` with the current filters, so the file holds every matching row in the same order, not only the
+visible page. Columns: outcome and margin (dB),
+administration and `adm_ref_id`, class / notice type / change / publication status, f, bandwidth, e.r.p., h1,
+criterion (with an "indicative" chip where the criterion does not bind the administration, for example RUS), FIN
+coordination status and distance to Finland.
+
+**Evidence sheet** (`terra-sheet.tsx`, opened by `ntc`). Fetches the single assignment, which carries the full P.1546
+record: the trigger, the Tier 1 upper bound and the Tier 2 worst point with path segments, other trigger levels, the
+parameters table and the P.1546 inputs and steps (collapsed); the relevance signals with their sources; the
+regulatory context (RR provision, GE06, criterion applicability, governing bilateral basis, M4 rows, citations); the
+MODIFY diff; the notice, site, antenna and publication fields with their source tags; and the assumptions by id, with
+their text from `/model`.
+
+**Map** (`terra-map.tsx`). Same MapLibre setup and OSM basemap as `/stations`. It draws the relevant transmitters of the
+filtered list, coloured by outcome with the status tokens (legend with icon and label). Every `exceeds` site also
+shows its worst Finnish point as a ring. Clicking a site selects it: a dashed line goes to its worst Finnish point
+(Tier 2, else the Tier 1 nearest point), labelled with E and the margin, and a card offers **Open evidence**. The
+selection is not in the URL; it starts from `ntc`.
+
+**Trends** (`terra-trends.tsx`). Per neighbour administration, small multiples of the notices first published
+(received, part 1) in the summed issues, by band, distance bin, station class and bandwidth, one `--series-1..4`
+colour per dimension. The anomaly rules of the selected issue list their matches, each linking to its row (`ntc`).
+
+**Draft letter** (`terra-draft.tsx`, opened by `draft`). The "DRAFT – for expert review, not sent" banner, the letter
+kind (chosen by the server), the addressee, warnings, Copy and Download `.md` (`brific<no>-<adm>-<kind>.md`), the
+annex table, the basis and the collapsed reviewer notes. **Polish with LLM** rewrites the body paragraphs; a rejected
+polish (422) keeps the template and shows the reason with the dropped and added protected tokens, 429 and 503 show
+their reasons, and the button is disabled when `/api/risk/chat` reports the LLM is off. A 409 shows the API's
+"no concern" reason. A polished letter lives in component state only.
+
+Components: `pages/terrestrial.tsx` (header, filters, tabs), `terra-table.tsx`, `terra-sheet.tsx`, `terra-map.tsx`,
+`terra-trends.tsx`, `terra-draft.tsx` and `terra-meta.ts` (search type, labels, term hints, formatters). The types are
+the `Terra*` block of `src/lib/api.ts`, mirrored from `backend/src/ific/terra/schemas.py`.
 
 ## `/stations` (stations map)
 

@@ -538,8 +538,8 @@ The letter kind is a pure function of the stored regulatory context, quoting the
 - Scoring of AP30, AP30A and AP30B plan notices. The 3074 `.mdb` has no such notices. It has only AP30A coordination
   references naming Finnish networks, which appear in the regulatory context.
 - The ITU EPFD (Art. 22) and ΔT/T (Appendix 5) examinations. This tool complements them; it does not reproduce them.
-- Terrestrial notices. The receiver interface, hazard inventory and risk-curve output are designed so that the
-  terrestrial side quest can reuse them, with P.1546 field strength against T/R 25-08 as the consequence.
+- Terrestrial notices. These are assessed by the separate `terra-1` model; see
+  [terrestrial-land-mobile.md](terrestrial-land-mobile.md).
 
 ## How the model is checked
 

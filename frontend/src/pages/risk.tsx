@@ -224,7 +224,7 @@ export function RiskPage() {
               </Button>
             )}
             <Button variant="outline" asChild>
-              <Link to="/sources">Go to Space IFIC sources</Link>
+              <Link to="/sources">Go to IFIC watcher</Link>
             </Button>
           </CardContent>
         </Card>

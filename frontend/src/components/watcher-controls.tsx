@@ -92,19 +92,34 @@ export function WatcherControls({ compact = false }: { compact?: boolean }) {
       <CardHeader className="max-sm:grid-cols-1!">
         <CardTitle className="flex flex-wrap items-center gap-2">
           <Radio className="size-4 text-primary" aria-hidden />
-          Space IFIC watcher
+          IFIC watcher
           <WatcherStateBadge state={state} />
         </CardTitle>
-        <CardDescription className="flex min-w-0 items-center gap-1">
-          Watches
-          <a
-            href={state.source_url}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex min-w-0 items-center gap-1 font-medium text-foreground underline-offset-4 hover:underline"
-          >
-            ITU Space IFIC databases <ExternalLink className="size-3" aria-hidden />
-          </a>
+        <CardDescription className="flex min-w-0 flex-col gap-0.5">
+          <span className="flex min-w-0 items-center gap-1">
+            Watches
+            <a
+              href={state.source_url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex min-w-0 items-center gap-1 font-medium whitespace-nowrap text-foreground underline-offset-4 hover:underline"
+            >
+              ITU Space IFIC databases <ExternalLink className="size-3 shrink-0" aria-hidden />
+            </a>
+          </span>
+          {state.terrestrial_enabled && (
+            <span className="flex min-w-0 items-center gap-1">
+              Also downloads
+              <a
+                href={state.terrestrial_source_url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex min-w-0 items-center gap-1 font-medium whitespace-nowrap text-foreground underline-offset-4 hover:underline"
+              >
+                terrestrial BR IFIC extracts <ExternalLink className="size-3 shrink-0" aria-hidden />
+              </a>
+            </span>
+          )}
         </CardDescription>
         <CardAction className="flex items-center gap-4 max-sm:col-start-1 max-sm:row-span-1 max-sm:row-start-3 max-sm:mt-2 max-sm:justify-self-start">
           <Tooltip>

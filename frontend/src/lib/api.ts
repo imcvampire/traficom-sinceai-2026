@@ -9,6 +9,8 @@ export type Health = {
 
 export type RunOutcome = 'ok' | 'error' | 'skipped'
 export type FileStatus = 'new' | 'downloading' | 'downloaded' | 'failed'
+/** `space` is the Space IFIC; `terrestrial` is the BR IFIC extract with the same issue number. */
+export type FileKind = 'space' | 'terrestrial'
 
 export type WatcherRun = {
   started_at: string
@@ -28,6 +30,8 @@ export type WatcherState = {
   interval_seconds: number
   running: boolean
   source_url: string
+  terrestrial_enabled: boolean
+  terrestrial_source_url: string
   last_run: WatcherRun | null
   next_run_at: string | null
 }
@@ -88,7 +92,7 @@ export const setWatcherEnabled = (enabled: boolean) =>
 
 export const checkNow = () => request<{ accepted: boolean }>('/api/watcher/check', { method: 'POST' })
 
-export const listFiles = () => request<WatcherFile[]>('/api/watcher/files')
+export const listFiles = (kind: FileKind = 'space') => request<WatcherFile[]>(`/api/watcher/files?kind=${kind}`)
 
 export type Outcome = 'exceeds' | 'meets' | 'screened_out' | 'not_applicable' | 'not_assessed'
 export type HazardMode = 'cochannel' | 'adjacent' | 'es_terrestrial' | 'blocking_im' | 'aggregate_networks'
@@ -516,3 +520,350 @@ export const listStations = (timePct: StationTimePct, threshold: number) =>
 
 export const getStation = (sourceRow: number, timePct: StationTimePct, threshold: number) =>
   request<StationDetail>(`/api/stations/${sourceRow}${stationParams(timePct, threshold)}`)
+
+// Mirrors backend/src/ific/terra/schemas.py: `/api/terrestrial/*` (BR IFIC terrestrial land mobile).
+export type TerraChange = 'new' | 'modified' | 'withdrawn' | 'unknown'
+export type TerraPubStatus = 'received' | 'recorded' | 'returned' | 'unknown'
+export type TerraApplicability = 'applicable' | 'indicative' | 'unknown'
+export type TerraSignalId = 'fin_coordination' | 'ge06_affected' | 'within_range' | 'freq_overlap_m4'
+export type TerraSegmentKind = 'land' | 'sea_cold' | 'sea_warm'
+export type TerraLetterKind = 'coordination_request' | 'enquiry'
+
+export type TerraIssueOut = {
+  ific_no: number
+  path: string
+  ingested: boolean
+  assessed: boolean
+  model_version: string | null
+  assignment_count: number | null
+  relevant_count: number | null
+  outcome_counts: Record<Outcome, number> | null
+  assessed_at: string | null
+  job: Job
+}
+
+export type TerraAcceptedOut = { accepted: boolean; job: Job }
+
+export type TerraSite = {
+  geo_key: number
+  geo_type: string | null
+  ctry: string | null
+  name: string | null
+  lat: number
+  lon: number
+  alt_m: number | null
+}
+
+export type TerraAntenna = {
+  ant_key: number
+  pwr_dbw: number | null
+  pwr_eiv: string | null
+  pwr_xyz: string | null
+  erp_dbw: number | null
+  hgt_agl_m: number | null
+  ant_dir: string | null
+  azm_max_e: number | null
+  gain_max: number | null
+  diagram: { azm: number; attn: number }[]
+  rows: number
+}
+
+export type TerraTarget = { terrakey: number; action: string | null; intent: string | null }
+
+export type TerraDiff = {
+  table: string
+  field: string
+  ant_key?: number | null
+  before: string | number | null
+  after: string | number | null
+}
+
+export type TerraFinding = { fdg_type: string | null; fdg_status: string | null; is_favorbl: boolean }
+
+export type TerraPubStatusOut = {
+  status: TerraPubStatus
+  part: string | null
+  pub_no: number | null
+  first_published_in: number | null
+  history: { pub_no: number | null; part: string }[]
+  finding: TerraFinding | null
+  findings: TerraFinding[]
+}
+
+export type TerraCoordination = { adm: string | null; coord_prov: string | null; coord_st: string | null }
+
+export type TerraSignal = { id: TerraSignalId; sufficient: boolean; detail: string; source: string }
+
+export type TerraRelevance = {
+  relevant: boolean
+  signals: TerraSignal[]
+  distance_km: number | null
+  fin_coordination: TerraCoordination[]
+  fin_coord_required: boolean
+}
+
+export type TerraRegulatory = {
+  rr_provision: { code: string | null; label: string | null }
+  ge06: { applies: boolean; cite: string | null }
+  criterion_id: string | null
+  criterion_applicability: TerraApplicability | null
+  applicability_reason: string | null
+  governing: string | null
+  m4_rows: { id: number; services: string | null }[]
+  m4_cite: string
+  citations: string[]
+}
+
+export type TerraCriterionRef = {
+  id: string
+  title: string
+  citation: string
+  verified: boolean
+  verified_by: string | null
+  applicability: TerraApplicability | null
+}
+
+export type TerraTrigger = {
+  base_dbuv_m: number
+  bandwidth_correction_db: number
+  e_dbuv_m: number
+  evaluation_km: number
+  note: string
+}
+
+export type TerraParameters = {
+  f_mhz: number
+  bw_khz: number | null
+  h1_m: number
+  h2_m: number
+  time_pct: number
+  loc_pct: number
+  erp_dbw: number
+  rx_env: string
+  bw_correction_db: number
+}
+
+export type TerraPoint = { lat: number; lon: number; distance_km: number; bearing_deg: number }
+
+export type TerraSegment = { kind: TerraSegmentKind; length_km: number }
+
+export type TerraTier1 = { point: TerraPoint; path: TerraSegment[]; e_upper_dbuv: number; margin_upper_db: number }
+
+export type TerraP1546 = {
+  version: string
+  inputs: Record<string, number | string>
+  steps: Record<string, number>
+  assumptions: string[]
+}
+
+export type TerraTier2 = {
+  worst_point: TerraPoint
+  path: TerraSegment[]
+  e_p1546_dbuv: number
+  antenna_attenuation_db: number
+  e_dbuv: number
+  margin_db: number
+  points_evaluated: number
+  e_all_land_dbuv: number
+  e_all_sea_dbuv: number
+  /** Omitted (null) in the assignment list; present on the single-assignment route. */
+  p1546?: TerraP1546 | null
+  other_levels: { trigger_dbuv_m: number; case: string; margin_db: number }[]
+}
+
+export type TerraHazard = {
+  hazard_id: string
+  outcome: Outcome
+  reason: string | null
+  tier: number
+  detail?: string | null
+  criterion_id?: string | null
+  trigger?: TerraTrigger | null
+  parameters?: TerraParameters | null
+  tier1?: TerraTier1 | null
+  tier2?: TerraTier2 | null
+}
+
+export type TerraAssignment = {
+  model_version: string
+  ific_no: number
+  terrakey: number
+  adm: string
+  adm_ref_id: string | null
+  stn_cls: string
+  stn_cls_description: string | null
+  notice_typ: string | null
+  notice_typ_description: string | null
+  role: 'tx' | 'rx' | 'unknown'
+  intent: string
+  prov: string | null
+  f_mhz: number | null
+  freq_min_mhz: number | null
+  freq_max_mhz: number | null
+  bw_khz: number | null
+  bw_code: string | null
+  emi_cls: string | null
+  d_rcv: string | null
+  site: TerraSite | null
+  antenna: TerraAntenna | null
+  change: TerraChange
+  target: TerraTarget | null
+  diff: TerraDiff[] | null
+  diff_reason: string | null
+  pub_status: TerraPubStatusOut
+  coordination: TerraCoordination[]
+  sources: string[]
+  relevance: TerraRelevance
+  regulatory: TerraRegulatory
+  criterion: TerraCriterionRef | null
+  hazard: TerraHazard
+  outcome: Outcome
+  reason: string | null
+  e_dbuv: number | null
+  trigger_dbuv: number | null
+  margin_db: number | null
+  assumptions: string[]
+  sort_key: number[]
+}
+
+export type TerraAssignmentList = {
+  ific_no: number
+  model_version: string
+  assessed_at: string
+  count: number
+  assignments: TerraAssignment[]
+}
+
+export type TerraCriterion = {
+  id: string
+  title: string
+  citation: string
+  doc_url: string
+  doc_sha256: string
+  f_min_mhz: number
+  f_max_mhz: number
+  time_pct: number
+  loc_pct: number
+  rx_height_m: number
+  reference_bw_khz: number
+  bw_correction: string
+  evaluation: string
+  bands: { f_min_mhz: number; f_max_mhz: number; trigger_dbuv_m: number; evaluation_km: number; quote: string }[]
+  verified: boolean
+  verified_by: string | null
+}
+
+export type TerraModel = {
+  model_version: string
+  p1546_version: string
+  criteria: TerraCriterion[]
+  assumptions: { id: string; text: string }[]
+  frameworks: string[]
+  neighbours: string[]
+  method_doc: string
+}
+
+export type TerraAnomalyRule = {
+  id: string
+  description: string
+  threshold: string
+  citation: string
+  matches: { terrakey: number; adm: string; adm_ref_id: string | null; detail: string }[]
+}
+
+export type TerraTrends = {
+  ific_no: number
+  issues: number[]
+  neighbours: string[]
+  dimensions: string[]
+  /** Keyed by issue number (a string once JSON-encoded). */
+  per_issue: Record<string, { received: number; by_adm: Record<string, number> }>
+  /** dimension -> administration -> value -> count */
+  counts: Record<string, Record<string, Record<string, number>>>
+  anomalies: TerraAnomalyRule[]
+}
+
+export type TerraDraftAnnexRow = {
+  adm_ref_id: string | null
+  kind: TerraLetterKind
+  f_mhz: number | null
+  bw_khz: number | null
+  erp_dbw: number | null
+  h1_m: number | null
+  criterion_id: string | null
+  applicability: string | null
+  trigger_dbuv: number | null
+  e_dbuv: number | null
+  margin_db: number | null
+  fin_coord: string | null
+  outcome: Outcome
+}
+
+export type TerraDraft = {
+  kind: TerraLetterKind
+  ific_no: number
+  adm: string
+  adm_name: string | null
+  annex: TerraDraftAnnexRow[]
+  basis: string[]
+  warnings: string[]
+  reviewer_notes: string[]
+  prose_paragraphs: string[]
+  model_version: string
+  letter_md: string
+}
+
+export type TerraDraftPolish = { letter_md: string; polished: boolean; model: string | null }
+
+export type TerraDraftAdm = { adm: string; adm_name: string | null; assignments: number }
+
+/** Server-side filters of the assignment list; list values become repeated query params. */
+export type TerraAssignmentFilters = {
+  outcome?: Outcome[]
+  adm?: string[]
+  change?: TerraChange
+  pub_status?: TerraPubStatus
+  relevant?: 'true' | 'false' | 'all'
+  criterion?: string
+  q?: string
+}
+
+function listQuery(params: Record<string, string | readonly string[] | undefined>): string {
+  const search = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (typeof value === 'string') {
+      if (value) search.set(key, value)
+    } else for (const item of value ?? []) search.append(key, item)
+  }
+  const text = search.toString()
+  return text ? `?${text}` : ''
+}
+
+const terraIssuePath = (ificNo: number) => `/api/terrestrial/issues/${ificNo}`
+
+export const listTerraIssues = () => request<TerraIssueOut[]>('/api/terrestrial/issues')
+
+export const assessTerraIssue = (ificNo: number) => request<TerraAcceptedOut>(terraIssuePath(ificNo), { method: 'POST' })
+
+export const listTerraAssignments = (ificNo: number, filters: TerraAssignmentFilters) =>
+  request<TerraAssignmentList>(`${terraIssuePath(ificNo)}/assignments${listQuery(filters)}`)
+
+/** Same filters and order as the list; the browser downloads it as `terra-<no>.csv`. */
+export const terraAssignmentsCsvUrl = (ificNo: number, filters: TerraAssignmentFilters) =>
+  `${terraIssuePath(ificNo)}/assignments.csv${listQuery(filters)}`
+
+export const getTerraAssignment = (ificNo: number, terrakey: number) =>
+  request<TerraAssignment>(`${terraIssuePath(ificNo)}/assignments/${terrakey}`)
+
+export const getTerraTrends = (ificNo: number, issues: readonly number[]) =>
+  request<TerraTrends>(`${terraIssuePath(ificNo)}/trends${listQuery({ issues: issues.join(',') })}`)
+
+export const listTerraDrafts = (ificNo: number) => request<TerraDraftAdm[]>(`${terraIssuePath(ificNo)}/drafts`)
+
+export const getTerraDraft = (ificNo: number, adm: string) =>
+  request<TerraDraft>(`${terraIssuePath(ificNo)}/drafts/${encodeURIComponent(adm)}`)
+
+export const polishTerraDraft = (ificNo: number, adm: string) =>
+  request<TerraDraftPolish>(`${terraIssuePath(ificNo)}/drafts/${encodeURIComponent(adm)}/polish`, { method: 'POST' })
+
+export const getTerraModel = () => request<TerraModel>('/api/terrestrial/model')

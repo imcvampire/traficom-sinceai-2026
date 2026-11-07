@@ -1,4 +1,7 @@
-"""In-memory stand-in for the ITU Space IFIC site, served through httpx2.MockTransport."""
+"""In-memory stand-in for the ITU Space IFIC and terrestrial BR IFIC sites, served via httpx2.MockTransport.
+
+Any URL not served answers 404, which for a terrestrial zip means "not published yet".
+"""
 
 import io
 import zipfile
@@ -15,6 +18,10 @@ Handler = Callable[[httpx2.Request], httpx2.Response | Awaitable[httpx2.Response
 
 def zip_url(no: int) -> str:
     return f"https://www.itu.int/sns/ific10/ific{no}.zip"
+
+
+def terra_url(no: int) -> str:
+    return f"https://www.itu.int/en/ITU-R/terrestrial/brific/BRIFIC/MDB/brific{no}.zip"
 
 
 def year_page(*rows: tuple[str, int]) -> str:
@@ -44,12 +51,23 @@ class FakeItu:
         }
         self.etags: dict[str, str] = {}
         self.files: dict[str, httpx2.Response] = {}
+        # Validators of served files: a matching If-None-Match or If-Modified-Since answers 304.
+        self.file_validators: dict[str, tuple[str, str]] = {}
         self.requests: list[httpx2.Request] = []
         self.override: Handler | None = None
 
     def serve_zip(self, no: int, members: dict[str, bytes] | None = None) -> None:
         content = make_zip(members if members is not None else {f"ific{no}.mdb": f"mdb {no}".encode()})
         self.files[zip_url(no)] = httpx2.Response(200, content=content)
+
+    def serve_terra(self, no: int, content: bytes | None = None) -> None:
+        url = terra_url(no)
+        etag, last_modified = f'"brific{no}-v1"', "Tue, 27 Oct 2026 10:00:00 GMT"
+        body = content if content is not None else make_zip({f"brific{no}.mdb": f"brific {no}".encode()})
+        self.files[url] = httpx2.Response(
+            200, content=body, headers={"etag": etag, "last-modified": last_modified}
+        )
+        self.file_validators[url] = (etag, last_modified)
 
     async def handle(self, request: httpx2.Request) -> httpx2.Response:
         self.requests.append(request)
@@ -63,11 +81,21 @@ class FakeItu:
                 return httpx2.Response(304)
             return httpx2.Response(200, text=self.pages[url], headers={"etag": etag} if etag else {})
         if url in self.files:
+            validators = self.file_validators.get(url)
+            if validators and (
+                request.headers.get("if-none-match") == validators[0]
+                or request.headers.get("if-modified-since") == validators[1]
+            ):
+                return httpx2.Response(304)
             return self.files[url]
         return httpx2.Response(404)
 
     def zip_requests(self) -> list[str]:
-        return [str(r.url) for r in self.requests if str(r.url).endswith(".zip")]
+        """Space IFIC zip requests only; terrestrial ones are in terra_requests()."""
+        return [str(r.url) for r in self.requests if str(r.url).endswith(".zip") and "/sns/" in str(r.url)]
+
+    def terra_requests(self) -> list[httpx2.Request]:
+        return [r for r in self.requests if "/terrestrial/" in str(r.url)]
 
     def client(self) -> httpx2.AsyncClient:
         return httpx2.AsyncClient(transport=httpx2.MockTransport(self.handle))
