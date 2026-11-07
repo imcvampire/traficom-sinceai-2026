@@ -90,11 +90,10 @@
     --series-5: oklch(0.6 0.13 55);
     /* Ordinal TX-frequency bins on the stations map, one hue light to dark (validated with the dataviz checks). */
     --band-0: #71b4ff;
-    --band-1: #5096ee;
-    --band-2: #2c79d3;
-    --band-3: #0a5db3;
-    --band-4: #004290;
-    --band-5: #00286f;
+    --band-1: #478fe7;
+    --band-2: #1b6bc4;
+    --band-3: #004999;
+    --band-4: #00286f;
     --chart-1: oklch(0.87 0 0);
     --chart-2: oklch(0.556 0 0);
     --chart-3: oklch(0.439 0 0);
@@ -142,11 +141,10 @@
     --series-4: oklch(0.74 0.15 350);
     --series-5: oklch(0.77 0.12 60);
     --band-0: #004e90;
-    --band-1: #1269b1;
-    --band-2: #3785cf;
-    --band-3: #5aa2e9;
-    --band-4: #7cbfff;
-    --band-5: #9eddff;
+    --band-1: #1a70ba;
+    --band-2: #4993dc;
+    --band-3: #74b8fd;
+    --band-4: #9eddff;
     --chart-1: oklch(0.87 0 0);
     --chart-2: oklch(0.556 0 0);
     --chart-3: oklch(0.439 0 0);

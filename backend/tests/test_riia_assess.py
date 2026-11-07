@@ -7,7 +7,7 @@ import pytest
 from riia_fixtures import FIXTURE_ISSUE, loaded_db
 
 from ific.riia import hazards
-from ific.riia.assess import assess_issue, technical_sort_key
+from ific.riia.assess import assess_issue, in_queue, queue_sort_key, technical_sort_key
 from ific.riia.receivers import Receiver
 
 AS_OF = date(2026, 7, 1)
@@ -171,3 +171,34 @@ def test_notified_pfd_reference_bandwidth_is_khz(tmp_path: Path) -> None:
     grp = next(g for g in _load_notices(con, FIXTURE_ISSUE)[1001].downlinks if g.grp_id == 2001)
     # −150 dB(W/m²) in 4 kHz → −150 − 10·log10(4000) = −186.02 dB(W/m²/Hz)
     assert grp.cpfd_dens == pytest.approx(-186.02, abs=0.01)
+
+
+def _notice(ntc_id: int, outcome: str, days_left: int | None, fin: bool = False) -> dict:
+    return {
+        "ntc_id": ntc_id,
+        "worst_outcome": outcome,
+        "max_share_violating": 0.1,
+        "max_median_exceedance_db": 1.0,
+        "regulatory": {
+            "days_left": days_left,
+            "window_open": days_left is not None and days_left >= 0,
+            "fin_identified": fin,
+        },
+    }
+
+
+def test_work_queue_is_exceeds_with_window_not_closed() -> None:
+    open_window = _notice(1, "exceeds", 30)
+    last_day = _notice(2, "exceeds", 0)
+    no_window = _notice(3, "exceeds", None)
+    closed = _notice(4, "exceeds", -1)
+    br_only = _notice(5, "meets", 30, fin=True)
+    assert [in_queue(n) for n in (open_window, last_day, no_window, closed, br_only)] == [
+        True,
+        True,
+        True,
+        False,
+        False,
+    ]
+    ordered = sorted([no_window, open_window, last_day], key=queue_sort_key)
+    assert [n["ntc_id"] for n in ordered] == [2, 1, 3]

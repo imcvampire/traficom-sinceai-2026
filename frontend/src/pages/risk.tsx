@@ -1,29 +1,38 @@
 import { useQuery } from '@tanstack/react-query'
 import { getRouteApi, Link } from '@tanstack/react-router'
-import { CalendarClock, CircleAlert, Flag, ListTodo, OctagonAlert, Radar } from 'lucide-react'
-import { useCallback, useMemo } from 'react'
+import { CircleAlert, Flag, ListTodo, MessageSquare, OctagonAlert, Radar } from 'lucide-react'
+import { useCallback, useMemo, useState } from 'react'
 import { NoticeSheet } from '@/components/notice-sheet'
 import { OutcomeBadge } from '@/components/outcome-badge'
+import { RiskChat, type ChatScope, type MessagesUpdate } from '@/components/risk-chat'
 import { RiskCompare } from '@/components/risk-compare'
 import { RiskHeader } from '@/components/risk-header'
-import { OUTCOME_ORDER, todayIso } from '@/components/risk-meta'
+import {
+  BR_DESCRIPTION,
+  ORBIT_LABEL,
+  OUTCOME_META,
+  OUTCOME_ORDER,
+  WORK_QUEUE_DESCRIPTION,
+  WORK_QUEUE_FILTER,
+  todayIso,
+} from '@/components/risk-meta'
 import { RiskTable, type RiskTableView } from '@/components/risk-table'
 import { StatCard } from '@/components/stat-card'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import type { NoticeSummary, NoticeView, Outcome } from '@/lib/api'
-import { formatDate } from '@/lib/format'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import type { ChatMessage, NoticeSummary, Outcome } from '@/lib/api'
 import { errorText, riskIssuesQuery, riskModelQuery, riskNoticesQuery } from '@/lib/queries'
 
 export type RiskSearch = RiskTableView & {
   ific?: number
-  view?: NoticeView
   ntc?: number
   compare?: string
   as_of?: string
+  chat?: boolean
 }
 
 const route = getRouteApi('/risk')
@@ -52,7 +61,6 @@ export function RiskPage() {
   const navigate = route.useNavigate()
   const today = todayIso()
   const asOf = search.as_of ?? today
-  const view: NoticeView = search.view ?? 'queue'
 
   const issues = useQuery(riskIssuesQuery)
   const model = useQuery(riskModelQuery)
@@ -64,7 +72,6 @@ export function RiskPage() {
   const assessedAt = issue?.assessed_at ?? null
 
   const technical = useQuery({ ...riskNoticesQuery(ificNo, asOf, 'technical', assessedAt), enabled: assessed })
-  const active = useQuery({ ...riskNoticesQuery(ificNo, asOf, view, assessedAt), enabled: assessed })
 
   const patch = useCallback(
     (next: Partial<RiskSearch>) => void navigate({ search: (prev) => ({ ...prev, ...next }), replace: true }),
@@ -78,16 +85,23 @@ export function RiskPage() {
       adm: search.adm,
       prov: search.prov,
       orbit: search.orbit,
+      open: search.open,
+      br: search.br,
       q: search.q,
       sort: search.sort,
     }),
-    [search.outcome, search.service, search.adm, search.prov, search.orbit, search.q, search.sort],
+    [search.outcome, search.service, search.adm, search.prov, search.orbit, search.open, search.br, search.q, search.sort],
   )
   const setTableView = useCallback(
-    ({ outcome, service, adm, prov, orbit, q, sort }: RiskTableView) =>
-      patch({ outcome, service, adm, prov, orbit, q, sort }),
+    ({ outcome, service, adm, prov, orbit, open, br, q, sort }: RiskTableView) =>
+      patch({ outcome, service, adm, prov, orbit, open, br, q, sort }),
     [patch],
   )
+  const inQueueView =
+    search.outcome === WORK_QUEUE_FILTER.outcome &&
+    search.open === WORK_QUEUE_FILTER.open &&
+    !search.br &&
+    search.sort === WORK_QUEUE_FILTER.sort
   const selected = useMemo(() => (search.compare ? search.compare.split(',').map(Number) : []), [search.compare])
 
   const serviceLabels = useMemo(
@@ -101,16 +115,53 @@ export function RiskPage() {
     [patch],
   )
 
+  const [visibleIds, setVisibleIds] = useState<number[]>([])
+  const [threads, setThreads] = useState<Record<string, ChatMessage[]>>({})
+  // Labels, not raw params, so the model knows what the user filtered on.
+  const chatFilters = useMemo(() => {
+    const entries: [string, string | undefined][] = [
+      ['outcome', search.outcome && OUTCOME_META[search.outcome].label],
+      ['service', search.service && serviceLabel(search.service)],
+      ['administration', search.adm],
+      ['provision', search.prov],
+      ['orbit', search.orbit && ORBIT_LABEL[search.orbit]],
+      ['comment window', search.open ? 'not closed' : undefined],
+      ['BR identified Finland', search.br ? 'yes' : undefined],
+      ['search', search.q],
+      ['sort', search.sort],
+    ]
+    return Object.fromEntries(entries.filter((e): e is [string, string] => Boolean(e[1])))
+  }, [search.outcome, search.service, search.adm, search.prov, search.orbit, search.open, search.br, search.q, search.sort, serviceLabel])
+  const chatScope: ChatScope =
+    search.ntc != null ? { kind: 'notice', ntcId: search.ntc } : { kind: 'view', ids: visibleIds, filters: chatFilters }
+  const threadKey =
+    chatScope.kind === 'notice'
+      ? `notice:${ificNo}:${asOf}:${chatScope.ntcId}`
+      : `view:${ificNo}:${asOf}:${JSON.stringify(chatFilters)}`
+  const updateThread = useCallback<MessagesUpdate>(
+    (update) => setThreads((prev) => ({ ...prev, [threadKey]: update(prev[threadKey] ?? []) })),
+    [threadKey],
+  )
+  const chatPanel = (
+    <RiskChat
+      key={threadKey}
+      ificNo={ificNo}
+      asOf={asOf}
+      scope={chatScope}
+      messages={threads[threadKey] ?? []}
+      onMessagesChange={updateThread}
+      className={chatScope.kind === 'notice' ? 'h-full' : 'flex-1'}
+    />
+  )
+
   const summary = useMemo(() => {
     const notices = technical.data?.notices ?? []
     const exceedingServices = [...new Set(notices.flatMap((n) => n.services_exceeding))]
-    const published = notices.map((n) => n.regulatory.d_wic).filter((d): d is string => Boolean(d)).sort()[0]
     return {
       counts: issue?.outcome_counts ?? countOutcomes(notices),
       queue: notices.filter((n) => n.in_queue).length,
       fin: notices.filter((n) => n.regulatory.fin_identified).length,
       exceedingServices,
-      published,
     }
   }, [technical.data, issue?.outcome_counts])
 
@@ -167,27 +218,6 @@ export function RiskPage() {
       </>
     )
 
-  const queueEmpty = (
-    <div className="mx-auto flex max-w-lg flex-col items-center gap-3">
-      <CalendarClock className="size-5" aria-hidden />
-      <p>
-        The work queue is empty as of {formatDate(asOf)}: no notice with an exceeding hazard or a BR finding for Finland
-        has an open comment window.
-        {summary.published && ` IFIC ${issue.ific_no} was published ${formatDate(summary.published)}.`} Set an earlier
-        “As of” date to see the queue as it stood then.
-      </p>
-      <div className="flex flex-wrap justify-center gap-2">
-        {summary.published && summary.published !== asOf && (
-          <Button variant="outline" size="sm" onClick={() => patch({ as_of: summary.published })}>
-            As of {formatDate(summary.published)}
-          </Button>
-        )}
-        <Button variant="outline" size="sm" onClick={() => patch({ view: 'technical' })}>
-          Show all notices
-        </Button>
-      </div>
-    </div>
-  )
 
   return (
     <>
@@ -234,15 +264,26 @@ export function RiskPage() {
                   <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-2">
                     {OUTCOME_ORDER.map((outcome) => (
                       <li key={outcome}>
-                        <button
-                          type="button"
-                          onClick={() => patch({ outcome: search.outcome === outcome ? undefined : outcome })}
-                          aria-pressed={search.outcome === outcome}
-                          className="flex items-center gap-1.5 rounded-md p-0.5 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none aria-pressed:ring-2 aria-pressed:ring-ring/60"
-                        >
-                          <OutcomeBadge outcome={outcome} />
-                          <span className="text-lg font-semibold tabular-nums">{summary.counts[outcome]}</span>
-                        </button>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              onClick={() => patch({ outcome: search.outcome === outcome ? undefined : outcome })}
+                              aria-pressed={search.outcome === outcome}
+                              className="flex items-center gap-1.5 rounded-md p-0.5 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none aria-pressed:ring-2 aria-pressed:ring-ring/60"
+                            >
+                              <OutcomeBadge outcome={outcome} />
+                              <span className="text-lg font-semibold tabular-nums">{summary.counts[outcome]}</span>
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent className="flex-col items-start gap-1">
+                            <span>{OUTCOME_META[outcome].description}</span>
+                            <span className="opacity-70">
+                              A notice counts once, under its worst hazard. Click to{' '}
+                              {search.outcome === outcome ? 'clear the filter' : 'filter the table'}.
+                            </span>
+                          </TooltipContent>
+                        </Tooltip>
                       </li>
                     ))}
                   </ul>
@@ -251,13 +292,17 @@ export function RiskPage() {
             </Card>
             <StatCard
               label="Work queue"
+              labelHint={WORK_QUEUE_DESCRIPTION}
               icon={ListTodo}
               loading={technical.isPending}
               value={summary.queue}
-              hint={summary.queue ? 'Open comment window' : 'No open comment window'}
+              hint="Exceeds, window not closed"
+              onClick={() => patch(WORK_QUEUE_FILTER)}
+              pressed={inQueueView}
             />
             <StatCard
               label="BR identified Finland"
+              labelHint={BR_DESCRIPTION}
               icon={Flag}
               loading={technical.isPending}
               value={summary.fin}
@@ -282,47 +327,28 @@ export function RiskPage() {
           </section>
 
           <section className="min-w-0 space-y-3" aria-label="Notices">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <ToggleGroup
-                type="single"
-                variant="outline"
-                size="sm"
-                value={view}
-                onValueChange={(value) => value && patch({ view: value === 'queue' ? undefined : (value as NoticeView) })}
-                aria-label="Notice order"
-              >
-                <ToggleGroupItem value="queue" className="px-3">
-                  Work queue
-                </ToggleGroupItem>
-                <ToggleGroupItem value="technical" className="px-3">
-                  All notices
-                </ToggleGroupItem>
-              </ToggleGroup>
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">
-                {view === 'queue'
-                  ? 'Open comment window with an exceeding hazard or a BR finding; sorted by days left, then technical order.'
-                  : 'Sorted by worst outcome, share violating, median exceedance, then notice id.'}
+                Sorted by worst outcome, share violating, median exceedance, then notice id, unless a column is sorted.
               </p>
+              {technical.data && (
+                <Button variant="outline" size="sm" onClick={() => patch({ chat: true })}>
+                  <MessageSquare aria-hidden /> Ask about this view
+                </Button>
+              )}
             </div>
-            {active.isError && !active.data ? (
-              <Alert variant="destructive">
-                <CircleAlert aria-hidden />
-                <AlertTitle>Could not load notices</AlertTitle>
-                <AlertDescription>{errorText(active.error)}</AlertDescription>
-              </Alert>
-            ) : (
-              <RiskTable
-                notices={active.data?.notices}
-                isPending={active.isPending}
-                view={tableView}
-                onViewChange={setTableView}
-                selected={selected}
-                onSelectedChange={setSelected}
-                onOpen={openNotice}
-                serviceLabel={serviceLabel}
-                empty={view === 'queue' ? queueEmpty : `IFIC ${issue.ific_no} has no assessed notices.`}
-              />
-            )}
+            <RiskTable
+              notices={technical.data?.notices}
+              isPending={technical.isPending}
+              view={tableView}
+              onViewChange={setTableView}
+              selected={selected}
+              onSelectedChange={setSelected}
+              onOpen={openNotice}
+              serviceLabel={serviceLabel}
+              empty={`IFIC ${issue.ific_no} has no assessed notices.`}
+              onVisibleIdsChange={setVisibleIds}
+            />
           </section>
 
           {selected.length > 0 && (
@@ -341,8 +367,24 @@ export function RiskPage() {
             ntcId={search.ntc}
             asOf={asOf}
             assessedAt={assessedAt}
-            onClose={() => patch({ ntc: undefined })}
+            onClose={() => patch({ ntc: undefined, chat: undefined })}
+            chatOpen={Boolean(search.chat)}
+            onChatOpenChange={(open) => patch({ chat: open || undefined })}
+            chat={search.ntc != null && chatPanel}
           />
+
+          <Sheet
+            open={Boolean(search.chat) && search.ntc == null && Boolean(technical.data)}
+            onOpenChange={(open) => !open && patch({ chat: undefined })}
+          >
+            <SheetContent className="w-full gap-0 data-[side=right]:sm:max-w-md">
+              <SheetHeader className="pr-12">
+                <SheetTitle>Ask about this view</SheetTitle>
+                <SheetDescription>The notices the table shows, after filters and search.</SheetDescription>
+              </SheetHeader>
+              {search.ntc == null && chatPanel}
+            </SheetContent>
+          </Sheet>
         </>
       )}
     </>

@@ -15,7 +15,7 @@ const SORT_RE = /^(ific_no|published_on|status|size_bytes|downloaded_at)\.(asc|d
 const OUTCOMES: readonly Outcome[] = ['exceeds', 'meets', 'screened_out', 'not_applicable', 'not_assessed']
 const ORBITS: readonly OrbitType[] = ['gso', 'ngso', 'es']
 const COMPARE_RE = /^\d+(,\d+)*$/
-const BAND_RE = /^[0-5](,[0-5])*$/
+const BAND_RE = /^[0-4](,[0-4])*$/
 const TIME_PCTS = [1, 10, 50] as const
 const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/
 
@@ -60,20 +60,24 @@ const riskRoute = createRoute({
     const sort = asText(search.sort)
     return {
       ific: asId(search.ific),
-      view: search.view === 'technical' || search.view === 'queue' ? search.view : undefined,
       outcome: OUTCOMES.includes(search.outcome as Outcome) ? (search.outcome as Outcome) : undefined,
       service: asText(search.service),
       adm: asText(search.adm),
       prov: asText(search.prov),
       orbit: ORBITS.includes(search.orbit as OrbitType) ? (search.orbit as OrbitType) : undefined,
+      open: asFlag(search.open),
+      br: asFlag(search.br),
       q: asText(search.q),
       sort: sort && RISK_SORT_RE.test(sort) ? sort : undefined,
       ntc: asId(search.ntc),
       compare: compare && COMPARE_RE.test(compare) ? compare : undefined,
       as_of: asDate(search.as_of),
+      chat: asFlag(search.chat),
     }
   },
 })
+
+const asFlag = (value: unknown) => (value === true || value === 'true' || value === 1 || value === '1' ? true : undefined)
 
 function asInt(value: unknown, min: number, max: number): number | undefined {
   const n = typeof value === 'number' ? value : typeof value === 'string' && /^-?\d+$/.test(value) ? Number(value) : NaN

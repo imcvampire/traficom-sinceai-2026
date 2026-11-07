@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
-import { CircleAlert, Flag, Info } from 'lucide-react'
+import { CircleAlert, Flag, MessageSquare } from 'lucide-react'
 import { useMemo, type ReactNode } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -11,9 +11,11 @@ import { formatDate, formatDateTime } from '@/lib/format'
 import { errorText, riskModelQuery, riskNoticeQuery } from '@/lib/queries'
 import { cn } from '@/lib/utils'
 import { HazardInventory } from './hazard-inventory'
+import { TermHint } from './term-hint'
 import { OutcomeBadge } from './outcome-badge'
 import { ChartLegend, RiskChart, type ChartCriterion, type ChartCurve, type ChartWorstCase } from './risk-chart'
 import {
+  BR_DESCRIPTION,
   HAZARD_MODE_META,
   ORBIT_LABEL,
   RECEIVER_SOURCE_LABEL,
@@ -24,8 +26,6 @@ import {
   formatShare,
   likelihoodAt,
 } from './risk-meta'
-
-export const SCREENING_LABEL = 'Risk-informed screening, not an ITU examination'
 
 function hazardName(h: Hazard): string {
   return [HAZARD_MODE_META[h.mode].label, h.service_label ?? h.service_class].filter(Boolean).join(' · ')
@@ -98,10 +98,10 @@ function OutcomeSet({ hazards }: { hazards: Hazard[] }) {
   )
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
   return (
     <div className="min-w-0">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dt className="text-xs text-muted-foreground">{hint ? <TermHint hint={hint}>{label}</TermHint> : label}</dt>
       <dd className="mt-0.5 text-sm font-medium break-words">{children}</dd>
     </div>
   )
@@ -135,7 +135,7 @@ function Regulatory({ detail }: { detail: NoticeDetail }) {
           </span>
           {reg.window_cite && <span className="block text-xs font-normal text-muted-foreground">{reg.window_cite}</span>}
         </Field>
-        <Field label="BR identified Finland">
+        <Field label="BR identified Finland" hint={BR_DESCRIPTION}>
           {reg.fin_identified ? (
             <span className="flex items-center gap-1">
               <Flag className="size-3.5 text-primary" aria-hidden /> Yes
@@ -252,9 +252,22 @@ type NoticeSheetProps = {
   asOf: string
   assessedAt: string | null
   onClose: () => void
+  chatOpen: boolean
+  onChatOpenChange: (open: boolean) => void
+  /** Rendered as a column beside the details while `chatOpen`. */
+  chat: ReactNode
 }
 
-export function NoticeSheet({ ificNo, ntcId, asOf, assessedAt, onClose }: NoticeSheetProps) {
+export function NoticeSheet({
+  ificNo,
+  ntcId,
+  asOf,
+  assessedAt,
+  onClose,
+  chatOpen,
+  onChatOpenChange,
+  chat,
+}: NoticeSheetProps) {
   const notice = useQuery({ ...riskNoticeQuery(ificNo, ntcId ?? 0, asOf, assessedAt), enabled: ntcId != null })
   const model = useQuery(riskModelQuery)
   const outcomeSensitive = useMemo(() => new Set(model.data?.outcome_sensitive ?? []), [model.data])
@@ -262,11 +275,23 @@ export function NoticeSheet({ ificNo, ntcId, asOf, assessedAt, onClose }: Notice
 
   return (
     <Sheet open={ntcId != null} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="w-full gap-0 overflow-y-auto data-[side=right]:sm:max-w-3xl">
+      <SheetContent
+        className={cn(
+          'w-full gap-0 overflow-y-auto',
+          chatOpen ? 'data-[side=right]:sm:max-w-7xl lg:overflow-hidden' : 'data-[side=right]:sm:max-w-3xl',
+        )}
+      >
         <SheetHeader className="gap-2 pr-12">
-          <Badge variant="outline" className="gap-1 text-muted-foreground">
-            <Info className="size-3" aria-hidden /> {SCREENING_LABEL}
-          </Badge>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button
+              variant={chatOpen ? 'secondary' : 'outline'}
+              size="sm"
+              aria-pressed={chatOpen}
+              onClick={() => onChatOpenChange(!chatOpen)}
+            >
+              <MessageSquare aria-hidden /> Ask
+            </Button>
+          </div>
           <SheetTitle className="text-lg">
             {detail ? (detail.sat_name ?? 'Unnamed network') : `Notice ${ntcId ?? ''}`}
           </SheetTitle>
@@ -286,23 +311,32 @@ export function NoticeSheet({ ificNo, ntcId, asOf, assessedAt, onClose }: Notice
             </div>
           </SheetDescription>
         </SheetHeader>
-        {notice.isPending ? (
-          <div className="space-y-4 px-4 pb-6">
-            <Skeleton className="h-16" />
-            <Skeleton className="h-80" />
-            <Skeleton className="h-40" />
+        <div className={cn(chatOpen && 'flex flex-col lg:min-h-0 lg:flex-1 lg:flex-row')}>
+          {chatOpen && (
+            <div className="order-first h-[28rem] shrink-0 border-y lg:order-last lg:h-auto lg:w-[28rem] lg:border-y-0 lg:border-l">
+              {chat}
+            </div>
+          )}
+          <div className={cn('min-w-0', chatOpen && 'pt-4 lg:flex-1 lg:overflow-y-auto lg:pt-0')}>
+            {notice.isPending ? (
+              <div className="space-y-4 px-4 pb-6">
+                <Skeleton className="h-16" />
+                <Skeleton className="h-80" />
+                <Skeleton className="h-40" />
+              </div>
+            ) : notice.isError ? (
+              <div className="px-4">
+                <Alert variant="destructive">
+                  <CircleAlert aria-hidden />
+                  <AlertTitle>Could not load notice {ntcId}</AlertTitle>
+                  <AlertDescription>{errorText(notice.error)}</AlertDescription>
+                </Alert>
+              </div>
+            ) : (
+              detail && <NoticeBody detail={detail} outcomeSensitive={outcomeSensitive} />
+            )}
           </div>
-        ) : notice.isError ? (
-          <div className="px-4">
-            <Alert variant="destructive">
-              <CircleAlert aria-hidden />
-              <AlertTitle>Could not load notice {ntcId}</AlertTitle>
-              <AlertDescription>{errorText(notice.error)}</AlertDescription>
-            </Alert>
-          </div>
-        ) : (
-          detail && <NoticeBody detail={detail} outcomeSensitive={outcomeSensitive} />
-        )}
+        </div>
       </SheetContent>
     </Sheet>
   )

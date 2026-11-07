@@ -761,16 +761,21 @@ def technical_sort_key(n: dict[str, Any]) -> tuple:
     )
 
 
+def window_not_closed(regulatory: dict[str, Any]) -> bool:
+    """The comment window is open on the as-of date, or the notice is at a stage without one."""
+    return regulatory["days_left"] is None or regulatory["days_left"] >= 0
+
+
 def in_queue(n: dict[str, Any]) -> bool:
-    """Doc, 'Work queue': "the notices with at least one exceeds hazard, or flagged by the BR, whose comment
-    window
-    is still open"."""
-    r = n["regulatory"]
-    return (n["worst_outcome"] == "exceeds" or r["fin_identified"]) and r["window_open"]
+    """Doc, 'Work queue': "the notices with at least one exceeds hazard whose comment window has not
+    closed"."""
+    return n["worst_outcome"] == "exceeds" and window_not_closed(n["regulatory"])
 
 
 def queue_sort_key(n: dict[str, Any]) -> tuple:
-    return (n["regulatory"]["days_left"], *technical_sort_key(n))
+    """Soonest deadline first; notices without a comment window after those with one."""
+    days_left = n["regulatory"]["days_left"]
+    return (days_left is None, days_left or 0, *technical_sort_key(n))
 
 
 def apply_as_of(n: dict[str, Any], as_of: date) -> dict[str, Any]:

@@ -54,21 +54,23 @@ export class ApiError extends Error {
   }
 }
 
+async function errorFrom(res: Response): Promise<ApiError> {
+  let detail = `HTTP ${res.status}`
+  try {
+    const body = (await res.json()) as { detail?: unknown }
+    if (typeof body.detail === 'string') detail = body.detail
+  } catch {
+    // non-JSON error body; keep the status text
+  }
+  return new ApiError(res.status, detail)
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     ...init,
     headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,
   })
-  if (!res.ok) {
-    let detail = `HTTP ${res.status}`
-    try {
-      const body = (await res.json()) as { detail?: unknown }
-      if (typeof body.detail === 'string') detail = body.detail
-    } catch {
-      // non-JSON error body; keep the status text
-    }
-    throw new ApiError(res.status, detail)
-  }
+  if (!res.ok) throw await errorFrom(res)
   return (await res.json()) as T
 }
 
@@ -266,6 +268,59 @@ export const getRiskNotice = (ificNo: number, ntcId: number, asOf: string) =>
   request<NoticeDetail>(`/api/risk/issues/${ificNo}/notices/${ntcId}${query({ as_of: asOf })}`)
 
 export const getRiskModel = () => request<ModelOut>('/api/risk/model')
+
+export type ChatMessage = { role: 'user' | 'assistant'; content: string }
+export type ChatRequest = {
+  messages: ChatMessage[]
+  ntc_ids?: number[]
+  ntc_id?: number
+  filters?: Record<string, string>
+}
+export type ChatStatus = { enabled: boolean; model: string | null; reason: string | null }
+export type ChatUsage = { prompt_tokens: number | null; completion_tokens: number | null }
+
+export const getChatStatus = () => request<ChatStatus>('/api/risk/chat')
+
+/** Streams one answer over SSE (`delta`, `done`, `error` events); resolves with the provider's usage. */
+export async function streamRiskChat(
+  ificNo: number,
+  asOf: string,
+  body: ChatRequest,
+  { signal, onDelta }: { signal?: AbortSignal; onDelta: (text: string) => void },
+): Promise<{ usage: ChatUsage | null }> {
+  const res = await fetch(`/api/risk/issues/${ificNo}/chat${query({ as_of: asOf })}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+    body: JSON.stringify(body),
+    signal,
+  })
+  if (!res.ok) throw await errorFrom(res)
+  if (!res.body) throw new ApiError(res.status, 'The response has no body')
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
+  let buffer = ''
+  for (;;) {
+    const { value, done } = await reader.read()
+    if (done) break
+    buffer += value.replace(/\r\n/g, '\n')
+    let end: number
+    while ((end = buffer.indexOf('\n\n')) >= 0) {
+      const block = buffer.slice(0, end)
+      buffer = buffer.slice(end + 2)
+      let event = 'message'
+      let data = ''
+      for (const line of block.split('\n')) {
+        if (line.startsWith('event:')) event = line.slice(6).trim()
+        else if (line.startsWith('data:')) data += line.slice(5).trimStart()
+      }
+      if (!data) continue
+      const payload = JSON.parse(data) as { text?: string; usage?: ChatUsage | null; detail?: string }
+      if (event === 'delta' && payload.text) onDelta(payload.text)
+      else if (event === 'error') throw new ApiError(502, payload.detail ?? 'The answer stopped with an error')
+      else if (event === 'done') return { usage: payload.usage ?? null }
+    }
+  }
+  throw new ApiError(502, 'The answer ended before it was complete')
+}
 
 export type ContourBound = 'exact' | 'below_1km' | 'at_least_1000km'
 export type NoContourReason =

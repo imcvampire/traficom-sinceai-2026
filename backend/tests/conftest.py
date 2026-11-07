@@ -15,6 +15,9 @@ def tmp_db_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr(settings, "watcher_enabled", False)
     monkeypatch.setattr(settings, "watcher_state_path", tmp_path / "watcher" / "watcher.sqlite3")
     monkeypatch.setattr(settings, "watcher_download_dir", tmp_path / "ific")
+    # The root .env holds a real provider key; tests must never reach the paid API.
+    monkeypatch.setattr(settings, "llm_api_key", None)
+    monkeypatch.setattr(settings, "llm_model", None)
     return db_dir
 
 

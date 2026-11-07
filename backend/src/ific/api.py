@@ -1,30 +1,52 @@
 import asyncio
+import json
+import logging
+import time
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, suppress
+from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
 import duckdb
+import httpx2
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from starlette.types import Receive, Scope, Send
 
 from ific import __version__, db, ingest, m4, special_interest, stations
 from ific.config import PROJECT_ROOT, settings
-from ific.riia import MODEL_VERSION, method
+from ific.llm import ChatClient, LlmError, Usage, make_chat_client
+from ific.riia import MODEL_VERSION, chat, method
 from ific.riia import store as risk_store
 from ific.riia.jobs import JobRunner
 from ific.riia.receivers import GenericM4Population
-from ific.riia.schemas import AcceptedOut, IssueOut, JobOut, ModelOut, NoticeDetailOut, NoticeListOut
+from ific.riia.schemas import (
+    AcceptedOut,
+    ChatIn,
+    ChatStatusOut,
+    IssueOut,
+    JobOut,
+    ModelOut,
+    NoticeDetailOut,
+    NoticeListOut,
+)
 from ific.watcher.service import WatcherService, WatcherState
 from ific.watcher.store import FileStatus, RunRow
+
+chat_log = logging.getLogger("ific.chat")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     con = db.connect(settings.db_path, settings.db_storage_version)
     watcher_task: asyncio.Task[None] | None = None
+    chat_client = make_chat_client(settings)
+    app.state.chat = chat_client
     try:
         app.state.ref_status = [
             *m4.ensure_m4(con, settings),
@@ -46,6 +68,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             if hasattr(app.state, "risk_jobs"):
                 app.state.risk_jobs.shutdown()
             con.close()
+            if chat_client is not None:
+                await chat_client.aclose()
 
 
 app = FastAPI(title="IFIC interference analyser", version=__version__, lifespan=lifespan)
@@ -303,3 +327,133 @@ def risk_notice(ific_no: int, ntc_id: int, con: Db, jobs: Jobs, as_of: AsOf = No
 @app.get("/api/risk/model")
 def risk_model(con: Db, jobs: Jobs) -> ModelOut:
     return ModelOut(**method.describe(sorted(risk_store.sensitive_assumptions(con, None, jobs.source))))
+
+
+def get_chat(request: Request) -> ChatClient | None:
+    return request.app.state.chat
+
+
+Chat = Annotated[ChatClient | None, Depends(get_chat)]
+
+
+def _chat_disabled_reason() -> str:
+    required = (("IFIC_LLM_API_KEY", settings.llm_api_key), ("IFIC_LLM_MODEL", settings.llm_model))
+    missing = [name for name, value in required if value is None]
+    return f"{' and '.join(missing) or 'the LLM client'} {'is' if len(missing) < 2 else 'are'} not set"
+
+
+@app.get("/api/risk/chat")
+async def risk_chat_status(client: Chat) -> ChatStatusOut:
+    if client is None:
+        return ChatStatusOut(enabled=False, model=None, reason=_chat_disabled_reason())
+    return ChatStatusOut(enabled=True, model=client.model, reason=None)
+
+
+def _sse(event: str, data: dict[str, Any]) -> bytes:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n".encode()
+
+
+@dataclass
+class _ChatTurn:
+    ific_no: int
+    scope: str
+    notice_count: int
+    history: int
+    started: float
+    first_token_s: float | None = None
+    usage: Usage | None = None
+    outcome: str = "cancelled"
+
+
+class _ChatStream(StreamingResponse):
+    """Streams one answer. Cleanup is in `__call__`, so a disconnect before the first chunk frees the slot."""
+
+    def __init__(self, client: ChatClient, upstream: httpx2.Response, turn: _ChatTurn) -> None:
+        self.client = client
+        self.upstream = upstream
+        self.turn = turn
+        super().__init__(
+            self._events(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    async def _events(self) -> AsyncIterator[bytes]:
+        turn = self.turn
+        try:
+            async for item in self.client.deltas(self.upstream):
+                if isinstance(item, Usage):
+                    turn.usage = item
+                    continue
+                if turn.first_token_s is None:
+                    turn.first_token_s = time.monotonic() - turn.started
+                yield _sse("delta", {"text": item})
+        except LlmError as e:
+            turn.outcome = "upstream_error"
+            yield _sse("error", {"detail": e.detail})
+            return
+        turn.outcome = "ok"
+        yield _sse("done", {"usage": vars(turn.usage) if turn.usage else None})
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            try:
+                await self.upstream.aclose()
+            finally:
+                self.client.release()
+                self._log()
+
+    def _log(self) -> None:
+        t, u = self.turn, self.turn.usage
+        chat_log.info(
+            "chat ific_no=%s scope=%s notices=%s history=%s prompt_tokens=%s completion_tokens=%s "
+            "first_token_s=%s elapsed_s=%.1f outcome=%s",
+            t.ific_no,
+            t.scope,
+            t.notice_count,
+            t.history,
+            u.prompt_tokens if u else None,
+            u.completion_tokens if u else None,
+            f"{t.first_token_s:.1f}" if t.first_token_s is not None else None,
+            time.monotonic() - t.started,
+            t.outcome,
+        )
+
+
+@app.post("/api/risk/issues/{ific_no}/chat")
+async def risk_chat(
+    ific_no: int, body: ChatIn, con: Db, jobs: Jobs, client: Chat, as_of: AsOf = None
+) -> StreamingResponse:
+    if client is None:
+        detail = f"chat is disabled: {_chat_disabled_reason()}"
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail)
+    if not client.try_acquire():
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "a chat answer is already being generated")
+    scope = "view" if body.ntc_id is None else "notice"
+    turn = _ChatTurn(ific_no, scope, 0, len(body.messages), time.monotonic())
+    try:
+        data = await run_in_threadpool(
+            chat.build_context,
+            con,
+            ific_no=ific_no,
+            receiver_source=jobs.source,
+            as_of=as_of or date.today(),
+            ntc_ids=body.ntc_ids,
+            ntc_id=body.ntc_id,
+            filters=body.filters,
+        )
+        if data is None:
+            what = f"notice {body.ntc_id} of IFIC {ific_no}" if body.ntc_id is not None else f"IFIC {ific_no}"
+            raise HTTPException(status.HTTP_404_NOT_FOUND, f"{what} has not been assessed")
+        turn.notice_count = len(data["notices"]["rows"])
+        try:
+            upstream = await client.open(chat.messages_for(data, [m.model_dump() for m in body.messages]))
+        except LlmError as e:
+            chat_log.warning("chat ific_no=%s upstream status=%s detail=%s", ific_no, e.status, e.detail)
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"LLM provider error: {e.detail}") from e
+    except BaseException:
+        client.release()
+        raise
+    return _ChatStream(client, upstream, turn)

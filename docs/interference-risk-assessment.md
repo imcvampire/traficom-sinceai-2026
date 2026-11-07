@@ -209,8 +209,10 @@ queue as a filter and sort order.
 | **Days left** | Days left in the comment window, counted from the IFIC publication date (`notice.d_wic`). For a CR/C, the window is the four months of RR No. 9.52. Under No. 9.52C, an administration that does not reply in time can be treated as not affected. Window lengths per provision live in a reference file that cites the RR edition. |
 | **BR identified Finland** | Finland is listed under a coordination provision in `provn` (for example 9.11, 9.14, 9.21 or AP30A §7.1), or a Finnish network is listed as affected in `tr_aff_ntw`. Otherwise, Finland may request inclusion under RR No. 9.41. |
 
-**Work queue:** the notices with at least one `exceeds` hazard, or flagged by the BR, whose comment window is still
-open. They are sorted by days left, then by the technical sort above. The evaluation date is an explicit `as_of`
+**Work queue:** the notices with at least one `exceeds` hazard whose comment window has not closed: the window is
+still open, or the notice is at a stage without one (Notification, Resolution 49). They are sorted by days left, with
+the notices that have no window after those that do, then by the technical sort above. BR findings are shown beside
+each notice and can be filtered on, but do not put a notice in the queue on their own. The evaluation date is an explicit `as_of`
 input recorded with every result, and only the UI defaults it to today.
 
 ## Data availability (IFIC 3074)

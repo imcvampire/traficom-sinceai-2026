@@ -34,8 +34,14 @@ H2_M = 10.0
 LOC_PCT = 50.0
 RX_ENV: p1546.RxEnv = "rural"
 D_MIN_KM, D_MAX_KM = 1.0, 1000.0
-# Upper edges of the TX-frequency colour bins: <30 MHz, <300 MHz, <1 GHz, <3 GHz, <10 GHz, above.
-BAND_EDGES_HZ = (30e6, 300e6, 1e9, 3e9, 10e9)
+# TX-frequency colour bins follow where the disc's meaning changes:
+#   0  below 30 MHz       no disc, below ITU-R P.1546
+#   1  30-470 MHz         disc to the T/R 25-08 trigger (its upper limit is inclusive)
+#   2  470 MHz-1 GHz      disc to the map threshold
+#   3  1-4 GHz            disc to the map threshold (P.1546's upper limit is inclusive)
+#   4  above 4 GHz        no disc, above ITU-R P.1546
+# The 1 GHz split only breaks up the large 470-4000 MHz group; it carries no regulatory meaning.
+BAND_LIMITS_HZ = (p1546.F_RANGE_MHZ[0] * 1e6, tr2508.RANGE_MHZ[1] * 1e6, 1e9, p1546.F_RANGE_MHZ[1] * 1e6)
 
 ContourBound = Literal["exact", "below_1km", "at_least_1000km"]
 NoContourReason = Literal[
@@ -190,7 +196,16 @@ _RAW_COLUMNS = [
 def band_bin(tx_hz: int | None) -> int | None:
     if tx_hz is None:
         return None
-    return sum(tx_hz >= edge for edge in BAND_EDGES_HZ)
+    p1546_lo, tr2508_hi, split, p1546_hi = BAND_LIMITS_HZ
+    if tx_hz < p1546_lo:
+        return 0
+    if tx_hz <= tr2508_hi:
+        return 1
+    if tx_hz < split:
+        return 2
+    if tx_hz <= p1546_hi:
+        return 3
+    return 4
 
 
 def _field(f_mhz: float, t_pct: float, d_km: float, h1_m: float, erp_dbw: float) -> p1546.FieldResult:

@@ -1,35 +1,90 @@
 import { Ban, CircleCheck, CircleHelp, OctagonAlert, ShieldCheck, type LucideIcon } from 'lucide-react'
-import type { CurveGrid, Hazard, HazardMode, NoticeDetail, OrbitType, Outcome, RegulatorySummary, Stage } from '@/lib/api'
+import type {
+  CurveGrid,
+  Hazard,
+  HazardMode,
+  NoticeDetail,
+  NoticeSummary,
+  OrbitType,
+  Outcome,
+  RegulatorySummary,
+  Stage,
+} from '@/lib/api'
+
+const MONTE_CARLO =
+  'the Monte Carlo method: a simulation that draws thousands of random receiver positions, antenna pointings and, for non-GSO systems, satellite positions, computes the interference for each draw and counts how often it is above the protection level'
+
+export const TIER_META: Record<Hazard['tier'], { label: string; description: string }> = {
+  0: {
+    label: 'Inventory',
+    description:
+      'Tier 0 checks frequency overlap and visibility only. A hazard stops here when there is no overlap or the satellite is never above the horizon in Finland.',
+  },
+  1: {
+    label: 'Worst case',
+    description:
+      'Tier 1 is one deterministic calculation with every input at its worst value: closest geometry, receiver main beam on the satellite, peak satellite gain. A hazard stops here when even that stays below every protection level.',
+  },
+  2: { label: 'Monte Carlo', description: `Tier 2 uses ${MONTE_CARLO}.` },
+}
+
+export const BR_DESCRIPTION =
+  'BR is the ITU Radiocommunication Bureau, which examines each notice and publishes the IFIC. "BR identified Finland" means its findings for this notice name Finland: as an administration whose coordination is required (provn, e.g. RR No. 9.11, 9.14, 9.21) or as the owner of an affected network (tr_aff_ntw).'
+
+export const OPEN_WINDOW_DESCRIPTION =
+  'Notices whose comment window has not closed on the "As of" date: the window is still open, or the notice is at a stage without a comment window (Notification, Res. 49). Notices with a closed window are hidden.'
+
+export const WORK_QUEUE_DESCRIPTION =
+  'Notices with an exceeding hazard whose comment window has not closed (still open, or no comment window at this stage). Click to show them, soonest deadline first.'
+
+/** The comment window is open on the as-of date, or the notice is at a stage that has none. Mirrors the API's
+ * `window_not_closed`, which decides `in_queue` together with an `exceeds` outcome. */
+export const windowNotClosed = ({ regulatory: r }: NoticeSummary) => r.days_left == null || r.days_left >= 0
+
+export const WORK_QUEUE_FILTER = { outcome: 'exceeds', open: true, br: undefined, sort: 'days_left.asc' } as const
 
 export const OUTCOME_ORDER: Outcome[] = ['exceeds', 'not_assessed', 'meets', 'screened_out', 'not_applicable']
 
-export const OUTCOME_META: Record<Outcome, { label: string; icon: LucideIcon; swatch: string; badge: string }> = {
+export const OUTCOME_META: Record<
+  Outcome,
+  { label: string; description: string; icon: LucideIcon; swatch: string; badge: string }
+> = {
   exceeds: {
     label: 'Exceeds',
+    description:
+      `At least one Finnish receiver violates an ITU-R protection criterion: interference above the protection level for longer than the allowed % of time. Found with ${MONTE_CARLO}.`,
     icon: OctagonAlert,
     swatch: 'bg-status-critical',
     badge: 'bg-status-critical/12 text-status-critical-foreground',
   },
   not_assessed: {
     label: 'Not assessed',
+    description:
+      'The hazard is relevant but the Monte Carlo simulation could not run, for example because orbit data is missing. Only the worst case is known, so this is not a clean result.',
     icon: CircleHelp,
     swatch: 'bg-status-warning',
     badge: 'bg-status-warning/15 text-foreground',
   },
   meets: {
     label: 'Meets',
+    description:
+      `No Finnish receiver violates any protection criterion. Checked with ${MONTE_CARLO}.`,
     icon: CircleCheck,
     swatch: 'bg-status-good',
     badge: 'bg-status-good/12 text-status-good-foreground',
   },
   screened_out: {
     label: 'Screened out',
+    description:
+      'Even the worst case (closest geometry, receiver main beam on the satellite, peak satellite gain) stays below every protection level, so the Monte Carlo simulation was not needed.',
     icon: ShieldCheck,
     swatch: 'bg-status-neutral',
     badge: 'bg-muted text-muted-foreground',
   },
   not_applicable: {
     label: 'Not applicable',
+    description:
+      'Nothing to assess: no frequency overlap with a Finnish service, the satellite is never above the horizon in Finland, or the notice is a suppression.',
     icon: Ban,
     swatch: 'bg-status-neutral',
     badge: 'bg-muted text-muted-foreground',

@@ -5,14 +5,13 @@ export const THRESHOLD_RANGE = [-20, 120] as const
 export const DEFAULT_EXAGGERATION = 20
 export const EXAGGERATION_RANGE = [1, 50] as const
 
-// TX-frequency bins; must match BAND_EDGES_HZ in backend/src/ific/stations.py.
+// TX-frequency bins where the disc's meaning changes; must match band_bin in backend/src/ific/stations.py.
 export const BANDS = [
-  { bin: 0, label: '< 30 MHz' },
-  { bin: 1, label: '30–300 MHz' },
-  { bin: 2, label: '300 MHz–1 GHz' },
-  { bin: 3, label: '1–3 GHz' },
-  { bin: 4, label: '3–10 GHz' },
-  { bin: 5, label: '≥ 10 GHz' },
+  { bin: 0, label: '< 30 MHz', note: 'below P.1546, no disc' },
+  { bin: 1, label: '30–470 MHz', note: 'disc to T/R 25-08 trigger' },
+  { bin: 2, label: '470 MHz–1 GHz', note: 'disc to map threshold' },
+  { bin: 3, label: '1–4 GHz', note: 'disc to map threshold' },
+  { bin: 4, label: '> 4 GHz', note: 'above P.1546, no disc' },
 ] as const
 
 export const NO_CONTOUR_LABEL: Record<NoContourReason, string> = {

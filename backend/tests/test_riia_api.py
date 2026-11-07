@@ -67,9 +67,11 @@ def test_assess_then_read(risk_client: TestClient) -> None:
     assert len(listing["notices"]) == 5 and listing["view"] == "technical"
     assert listing["notices"][0]["worst_outcome"] == "exceeds"
     queue = risk_client.get(f"/api/risk/issues/{FIXTURE_ISSUE}/notices?as_of=2026-07-01&view=queue").json()
-    assert [n["ntc_id"] for n in queue["notices"]] == [1001]
+    # 1002 is a Notification (no comment window), so it follows 1001's open window.
+    assert [n["ntc_id"] for n in queue["notices"]] == [1001, 1002]
     late = risk_client.get(f"/api/risk/issues/{FIXTURE_ISSUE}/notices?as_of=2026-11-06&view=queue").json()
-    assert late["notices"] == []
+    # 1001's window has closed by then; 1002 has none to close.
+    assert [n["ntc_id"] for n in late["notices"]] == [1002]
 
     detail = risk_client.get(f"/api/risk/issues/{FIXTURE_ISSUE}/notices/1001?as_of=2026-07-01").json()
     assert detail["regulatory"]["days_left"] == 114 and detail["regulatory"]["findings"]

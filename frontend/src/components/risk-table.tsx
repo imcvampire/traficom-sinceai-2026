@@ -10,8 +10,8 @@ import {
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table'
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Flag, Search, X } from 'lucide-react'
-import { useMemo, type ReactNode } from 'react'
+import { ArrowDown, ArrowUp, ArrowUpDown, CalendarClock, ChevronLeft, ChevronRight, Flag, Search, X } from 'lucide-react'
+import { useEffect, useMemo, type ReactNode } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -19,11 +19,15 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Toggle } from '@/components/ui/toggle'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import type { NoticeSummary, OrbitType, Outcome } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { OutcomeBadge } from './outcome-badge'
 import {
+  BR_DESCRIPTION,
+  OPEN_WINDOW_DESCRIPTION,
   OUTCOME_META,
   OUTCOME_ORDER,
   ORBIT_LABEL,
@@ -32,6 +36,7 @@ import {
   daysLeftText,
   formatDb,
   formatShare,
+  windowNotClosed,
 } from './risk-meta'
 
 export type RiskTableView = {
@@ -40,6 +45,8 @@ export type RiskTableView = {
   adm?: string
   prov?: string
   orbit?: OrbitType
+  open?: boolean
+  br?: boolean
   q?: string
   sort?: string
 }
@@ -49,7 +56,19 @@ export const RISK_SORT_RE = /^(outcome|network|adm|prov|share|exceedance|days_le
 const PAGE_SIZE = 25
 const ALL = '__all'
 
-const FILTER_KEYS = ['outcome', 'service', 'adm', 'prov', 'orbit'] as const
+/** URL filter key → the table column it filters. */
+const FILTER_COLUMNS = {
+  outcome: 'outcome',
+  service: 'service',
+  adm: 'adm',
+  prov: 'prov',
+  orbit: 'orbit',
+  open: 'days_left',
+  br: 'fin',
+} as const
+const FILTER_KEYS = Object.keys(FILTER_COLUMNS) as (keyof typeof FILTER_COLUMNS)[]
+
+const windowOpen = ({ regulatory: r }: NoticeSummary) => r.window_open && r.days_left != null && r.days_left >= 0
 
 function useColumns(serviceLabel: (id: string) => string, onOpen: (ntcId: number) => void): ColumnDef<NoticeSummary>[] {
   return useMemo(
@@ -170,11 +189,9 @@ function useColumns(serviceLabel: (id: string) => string, onOpen: (ntcId: number
       },
       {
         id: 'days_left',
-        accessorFn: (n) =>
-          n.regulatory.window_open && n.regulatory.days_left != null && n.regulatory.days_left >= 0
-            ? n.regulatory.days_left
-            : undefined,
+        accessorFn: (n) => (windowOpen(n) ? n.regulatory.days_left : undefined),
         header: 'Days left',
+        filterFn: (row) => windowNotClosed(row.original),
         sortUndefined: 'last',
         sortDescFirst: false,
         meta: { align: 'right' },
@@ -187,6 +204,8 @@ function useColumns(serviceLabel: (id: string) => string, onOpen: (ntcId: number
         id: 'fin',
         accessorFn: (n) => (n.regulatory.fin_identified ? 1 : 0),
         header: 'BR',
+        filterFn: (row) => row.original.regulatory.fin_identified,
+        meta: { hint: BR_DESCRIPTION },
         cell: ({ row }) =>
           row.original.regulatory.fin_identified ? (
             <Badge variant="outline" className="gap-1 whitespace-nowrap">
@@ -247,6 +266,8 @@ type RiskTableProps = {
   onOpen: (ntcId: number) => void
   serviceLabel: (id: string) => string
   empty: ReactNode
+  /** Called with the ids of every filtered row, in sort order, across all pages. */
+  onVisibleIdsChange?: (ids: number[]) => void
 }
 
 export function RiskTable({
@@ -259,6 +280,7 @@ export function RiskTable({
   onOpen,
   serviceLabel,
   empty,
+  onVisibleIdsChange,
 }: RiskTableProps) {
   const columns = useColumns(serviceLabel, onOpen)
   const data = useMemo(() => notices ?? [], [notices])
@@ -266,7 +288,7 @@ export function RiskTable({
   // models, and their page-index auto-reset then re-renders forever.
   const sorting = useMemo(() => parseSort(view.sort), [view.sort])
   const columnFilters = useMemo<ColumnFiltersState>(
-    () => FILTER_KEYS.flatMap((id) => (view[id] ? [{ id, value: view[id] }] : [])),
+    () => FILTER_KEYS.flatMap((key) => (view[key] ? [{ id: FILTER_COLUMNS[key], value: view[key] }] : [])),
     [view],
   )
   const rowSelection = useMemo<RowSelectionState>(
@@ -291,7 +313,7 @@ export function RiskTable({
   const counts = useMemo(() => {
     const result = Object.fromEntries(OUTCOME_ORDER.map((o) => [o, 0])) as Record<Outcome, number>
     for (const n of data) result[n.worst_outcome]++
-    return result
+    return { ...result, open: data.filter(windowNotClosed).length, br: data.filter((n) => n.regulatory.fin_identified).length }
   }, [data])
 
   // oxlint-disable-next-line react/incompatible-library -- no React Compiler in this app
@@ -332,32 +354,73 @@ export function RiskTable({
   })
 
   const rows = table.getRowModel().rows
+  const visibleKey = table
+    .getPrePaginationRowModel()
+    .rows.map((r) => r.id)
+    .join(',')
+  useEffect(() => {
+    onVisibleIdsChange?.(visibleKey ? visibleKey.split(',').map(Number) : [])
+  }, [visibleKey, onVisibleIdsChange])
   const filteredCount = table.getFilteredRowModel().rows.length
   const filtering = Boolean(view.q || FILTER_KEYS.some((k) => view[k]))
   const set = (patch: Partial<RiskTableView>) => onViewChange({ ...view, ...patch })
 
   return (
     <div className="min-w-0 space-y-3">
-      <ToggleGroup
-        type="single"
-        variant="outline"
-        size="sm"
-        value={view.outcome ?? 'all'}
-        onValueChange={(value) => set({ outcome: !value || value === 'all' ? undefined : (value as Outcome) })}
-        aria-label="Filter by worst outcome"
-        className="flex-wrap"
-      >
-        <ToggleGroupItem value="all" className="gap-1.5 px-3">
-          All <span className="text-muted-foreground tabular-nums">{data.length}</span>
-        </ToggleGroupItem>
-        {OUTCOME_ORDER.map((outcome) => (
-          <ToggleGroupItem key={outcome} value={outcome} className="gap-1.5 px-3">
-            <span className={cn('size-2 rounded-full', OUTCOME_META[outcome].swatch)} aria-hidden />
-            {OUTCOME_META[outcome].label}
-            <span className="text-muted-foreground tabular-nums">{counts[outcome]}</span>
+      <div className="flex flex-wrap items-center gap-2">
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          value={view.outcome ?? 'all'}
+          onValueChange={(value) => set({ outcome: !value || value === 'all' ? undefined : (value as Outcome) })}
+          aria-label="Filter by worst outcome"
+          className="flex-wrap"
+        >
+          <ToggleGroupItem value="all" className="gap-1.5 px-3">
+            All <span className="text-muted-foreground tabular-nums">{data.length}</span>
           </ToggleGroupItem>
-        ))}
-      </ToggleGroup>
+          {OUTCOME_ORDER.map((outcome) => (
+            <ToggleGroupItem key={outcome} value={outcome} className="gap-1.5 px-3">
+              <span className={cn('size-2 rounded-full', OUTCOME_META[outcome].swatch)} aria-hidden />
+              {OUTCOME_META[outcome].label}
+              <span className="text-muted-foreground tabular-nums">{counts[outcome]}</span>
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Toggle
+              variant="outline"
+              size="sm"
+              pressed={Boolean(view.open)}
+              onPressedChange={(pressed) => set({ open: pressed || undefined })}
+              className="gap-1.5 px-3"
+            >
+              <CalendarClock aria-hidden />
+              Window not closed
+              <span className="text-muted-foreground tabular-nums">{counts.open}</span>
+            </Toggle>
+          </TooltipTrigger>
+          <TooltipContent>{OPEN_WINDOW_DESCRIPTION}</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Toggle
+              variant="outline"
+              size="sm"
+              pressed={Boolean(view.br)}
+              onPressedChange={(pressed) => set({ br: pressed || undefined })}
+              className="gap-1.5 px-3"
+            >
+              <Flag className="text-primary" aria-hidden />
+              BR identified Finland
+              <span className="text-muted-foreground tabular-nums">{counts.br}</span>
+            </Toggle>
+          </TooltipTrigger>
+          <TooltipContent>{BR_DESCRIPTION}</TooltipContent>
+        </Tooltip>
+      </div>
 
       <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
         <FilterSelect label="Services" value={view.service} options={options.service} onChange={(service) => set({ service })} />
@@ -394,24 +457,33 @@ export function RiskTable({
                   const sorted = header.column.getIsSorted()
                   const meta = header.column.columnDef.meta
                   const SortIcon = sorted === 'asc' ? ArrowUp : sorted === 'desc' ? ArrowDown : ArrowUpDown
+                  const label = flexRender(header.column.columnDef.header, header.getContext())
+                  const content = header.column.getCanSort() ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={cn('-mx-2 h-8 gap-1 px-2', meta?.align === 'right' && 'ml-auto flex')}
+                      onClick={header.column.getToggleSortingHandler()}
+                    >
+                      {label}
+                      <SortIcon className={cn('size-3.5', !sorted && 'opacity-40')} aria-hidden />
+                    </Button>
+                  ) : (
+                    <span>{label}</span>
+                  )
                   return (
                     <TableHead
                       key={header.id}
                       className={cn('whitespace-nowrap', meta?.className, meta?.align === 'right' && 'text-right')}
                       aria-sort={sorted === 'asc' ? 'ascending' : sorted === 'desc' ? 'descending' : undefined}
                     >
-                      {header.column.getCanSort() ? (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className={cn('-mx-2 h-8 gap-1 px-2', meta?.align === 'right' && 'ml-auto flex')}
-                          onClick={header.column.getToggleSortingHandler()}
-                        >
-                          {flexRender(header.column.columnDef.header, header.getContext())}
-                          <SortIcon className={cn('size-3.5', !sorted && 'opacity-40')} aria-hidden />
-                        </Button>
+                      {meta?.hint ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>{content}</TooltipTrigger>
+                          <TooltipContent>{meta.hint}</TooltipContent>
+                        </Tooltip>
                       ) : (
-                        flexRender(header.column.columnDef.header, header.getContext())
+                        content
                       )}
                     </TableHead>
                   )

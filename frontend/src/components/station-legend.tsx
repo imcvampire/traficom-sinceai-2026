@@ -27,11 +27,17 @@ export function StationLegend({ model, counts, view3d, exaggeration, onExaggerat
     <div className="space-y-3 text-xs">
       <div>
         <h3 className="mb-1.5 font-medium">TX frequency</h3>
-        <ul className="grid grid-cols-2 gap-x-3 gap-y-1">
+        <ul className="space-y-1">
           {BANDS.map((b) => (
-            <li key={b.bin} className="flex items-center gap-2">
-              <span className="size-2.5 shrink-0 rounded-full" style={{ background: `var(--band-${b.bin})` }} aria-hidden />
-              <span>{b.label}</span>
+            <li key={b.bin} className="flex items-baseline gap-2">
+              <span
+                className="size-2.5 shrink-0 translate-y-0.5 rounded-full"
+                style={{ background: `var(--band-${b.bin})` }}
+                aria-hidden
+              />
+              <span>
+                {b.label} <span className="text-muted-foreground">· {b.note}</span>
+              </span>
               <span className="ml-auto tabular-nums text-muted-foreground">{counts[b.bin] ?? 0}</span>
             </li>
           ))}

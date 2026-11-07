@@ -110,15 +110,21 @@ def test_time_percentage_changes_reach(client: TestClient) -> None:
 
 
 def test_band_bins() -> None:
-    assert [stations.band_bin(hz) for hz in (1_500_000, 87_900_000, 450e6, 1.8e9, 3.5e9, 27.5e9, None)] == [
-        0,
-        1,
-        2,
-        3,
-        4,
-        5,
-        None,
-    ]
+    cases = {
+        1_500_000: 0,
+        29_999_999: 0,
+        30_000_000: 1,
+        87_900_000: 1,
+        470_000_000: 1,
+        470_000_001: 2,
+        999_999_999: 2,
+        1_000_000_000: 3,
+        4_000_000_000: 3,
+        4_000_000_001: 4,
+        27_500_000_000: 4,
+    }
+    assert {hz: stations.band_bin(hz) for hz in cases} == cases
+    assert stations.band_bin(None) is None
 
 
 def test_detail(client: TestClient) -> None:

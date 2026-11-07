@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from pydantic import Field, HttpUrl, field_validator
+from pydantic import Field, HttpUrl, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -23,10 +23,26 @@ class Settings(BaseSettings):
     watcher_http_timeout_seconds: float = Field(60.0, gt=0)
     watcher_max_download_bytes: int = Field(2_000_000_000, gt=0)
 
+    # OpenAI-compatible chat completions API; the default endpoint is Featherless (https://featherless.ai).
+    llm_api_key: SecretStr | None = None
+    llm_base_url: HttpUrl = HttpUrl("https://api.featherless.ai/v1")
+    llm_model: str | None = None
+    llm_timeout_seconds: float = Field(60.0, gt=0)
+    llm_max_concurrent: int = Field(1, ge=1)
+
+    @field_validator("llm_api_key", "llm_model", mode="before")
+    @classmethod
+    def _blank_as_unset(cls, value: object) -> object:
+        return None if isinstance(value, str) and not value.strip() else value
+
     @field_validator("watcher_download_dir", "watcher_state_path")
     @classmethod
     def _resolve_against_project_root(cls, path: Path) -> Path:
         return path if path.is_absolute() else PROJECT_ROOT / path
+
+    @property
+    def llm_enabled(self) -> bool:
+        return self.llm_api_key is not None and self.llm_model is not None
 
     @property
     def db_path(self) -> Path:

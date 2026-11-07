@@ -100,8 +100,10 @@ Stop the server first.
 ## Configuration
 
 Settings are read from environment variables with the `IFIC_` prefix, or from `.env` in the repository root. Both
-the API and the CLI find that file whatever the working directory. `.env.example` lists the watcher settings. Other
-settings are:
+the API and the CLI find that file whatever the working directory. `.env.example` lists the watcher and LLM
+settings. The LLM settings point at [Featherless](https://featherless.ai), which serves an OpenAI-compatible API.
+Put the key in `.env` as `IFIC_LLM_API_KEY` and never commit it. The key is held as a `SecretStr`, so it is masked
+in reprs and logs; call `get_secret_value()` only where a request is built. Other settings are:
 
 | Variable | Default | Notes |
 |---|---|---|
@@ -109,6 +111,11 @@ settings are:
 | `IFIC_DB_DIR` | `var/db` | Holds `ific.duckdb` |
 | `IFIC_DB_STORAGE_VERSION` | `v1.5.0` | Storage format for new DB files, kept readable by DuckDB 1.x GUI clients |
 | `IFIC_CORS_ORIGINS` | `["http://localhost:5173"]` | JSON list |
+| `IFIC_LLM_MAX_CONCURRENT` | `1` | Chat answers streamed at once; a request over the limit gets 429. A Featherless model with concurrency cost 4 uses 4 units of the plan per answer |
+
+The chat on `/risk` stays disabled until both `IFIC_LLM_API_KEY` and `IFIC_LLM_MODEL` are set. `GET /api/risk/chat`
+reports whether it is enabled and why not; `POST /api/risk/issues/{ific_no}/chat` streams one answer as server-sent
+events (`delta`, `done`, `error`). Each turn logs one `ific.chat` line with token counts and timings, never the text.
 
 ## Development
 

@@ -4,6 +4,7 @@ import {
   ApiError,
   assessIssue,
   checkNow,
+  getChatStatus,
   getHealth,
   getRiskModel,
   getRiskNotice,
@@ -29,6 +30,7 @@ export const queryKeys = {
   files: ['watcher', 'files'] as const,
   riskIssues: ['risk', 'issues'] as const,
   riskModel: ['risk', 'model'] as const,
+  riskChat: ['risk', 'chat'] as const,
   riskNotices: (ificNo: number) => ['risk', 'issues', ificNo, 'notices'] as const,
   stations: ['stations'] as const,
 }
@@ -61,6 +63,12 @@ export const riskIssuesQuery = queryOptions({
 export const riskModelQuery = queryOptions({
   queryKey: queryKeys.riskModel,
   queryFn: getRiskModel,
+  staleTime: Infinity,
+})
+
+export const chatStatusQuery = queryOptions({
+  queryKey: queryKeys.riskChat,
+  queryFn: getChatStatus,
   staleTime: Infinity,
 })
 

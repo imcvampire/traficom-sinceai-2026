@@ -1,9 +1,9 @@
 """Response models of `/api/risk/*` (contract: plans/261106-2255-sat-severity-scoring/api-contract.md)."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, StringConstraints, field_validator
 
 Outcome = Literal["exceeds", "meets", "screened_out", "not_applicable", "not_assessed"]
 
@@ -210,3 +210,32 @@ class ModelOut(BaseModel):
     inputs: list[ModelInputOut]
     outcome_sensitive: list[str]
     doc_path: str
+
+
+FilterKey = Annotated[str, StringConstraints(max_length=40)]
+FilterValue = Annotated[str, StringConstraints(max_length=200)]
+
+
+class ChatMessageIn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=8000)
+
+
+class ChatIn(BaseModel):
+    messages: list[ChatMessageIn] = Field(min_length=1, max_length=40)
+    ntc_ids: list[int] | None = Field(None, max_length=1000)
+    ntc_id: int | None = None
+    filters: dict[FilterKey, FilterValue] = Field(default_factory=dict, max_length=12)
+
+    @field_validator("messages")
+    @classmethod
+    def _ends_with_user(cls, messages: list[ChatMessageIn]) -> list[ChatMessageIn]:
+        if messages[-1].role != "user":
+            raise ValueError("the last message must be from the user")
+        return messages
+
+
+class ChatStatusOut(BaseModel):
+    enabled: bool
+    model: str | None
+    reason: str | None

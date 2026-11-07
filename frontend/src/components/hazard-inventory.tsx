@@ -6,7 +6,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import type { Hazard } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { OutcomeBadge } from './outcome-badge'
-import { HAZARD_MODE_META, formatBand, formatDb, formatShare, formatTimePct } from './risk-meta'
+import { HAZARD_MODE_META, TIER_META, formatBand, formatDb, formatShare, formatTimePct } from './risk-meta'
+import { TermHint } from './term-hint'
 
 const COLUMNS = ['Mode', 'Service', 'Band', 'Tier', 'Outcome', 'Share violating', 'Exceedance (median / P95)', 'Worst case']
 
@@ -21,7 +22,7 @@ function HazardDetails({ hazard, outcomeSensitive }: { hazard: Hazard; outcomeSe
         <section>
           <SectionTitle>Population</SectionTitle>
           <p className="tabular-nums">
-            {hazard.n_receivers.toLocaleString()} receivers · {hazard.n_samples.toLocaleString()} samples
+            {hazard.n_receivers.toLocaleString()} receivers · {hazard.n_samples.toLocaleString()} Monte Carlo samples
           </p>
         </section>
         {hazard.criteria.length > 0 && (
@@ -162,7 +163,11 @@ export function HazardInventory({ hazards, outcomeSensitive }: { hazards: Hazard
                   <TableCell className="whitespace-nowrap tabular-nums">
                     {hazard.bands_hz.length ? hazard.bands_hz.map((b) => <div key={b.join('-')}>{formatBand(b)}</div>) : '—'}
                   </TableCell>
-                  <TableCell className="tabular-nums">{hazard.tier}</TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    <TermHint hint={TIER_META[hazard.tier].description}>
+                      <span className="tabular-nums">{hazard.tier}</span> · {TIER_META[hazard.tier].label}
+                    </TermHint>
+                  </TableCell>
                   <TableCell className="min-w-40">
                     <OutcomeBadge outcome={hazard.outcome} />
                     {hazard.reason && <p className="mt-1 text-xs whitespace-normal text-muted-foreground">{hazard.reason}</p>}

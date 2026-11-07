@@ -32,18 +32,32 @@ and never shows a composite score. All state is in the URL, and invalid values a
 | Param | Values |
 |---|---|
 | `ific` | Issue number |
-| `view` | `queue` (default) or `technical` |
 | `outcome` | `exceeds`, `meets`, `screened_out`, `not_applicable`, `not_assessed` |
 | `service`, `adm`, `prov`, `q` | Service class id, administration, provision, free-text search |
 | `orbit` | `gso`, `ngso`, `es` |
-| `sort` | `<column>.(asc\|desc)`; without it the table keeps the server order of the active view |
+| `open` | `true`: hide notices whose comment window has closed by the `as_of` date (keeps open windows and stages without one) |
+| `br` | `true`: only notices where the BR identified Finland (`provn` or `tr_aff_ntw` lists FIN) |
+| `sort` | `<column>.(asc\|desc)`; without it the table keeps the server's technical order (worst outcome, share violating, median exceedance, `ntc_id`) |
 | `ntc` | Opens the detail sheet for that notice, so a detail view can be shared |
 | `compare` | Comma-separated `ntc_id` list for the compare view |
 | `as_of` | `YYYY-MM-DD` evaluation date for the regulatory context; omitted means today |
+| `chat` | `true`: opens the chat panel. Its scope is the open notice (`ntc`), else the notices the table shows after filters and search. Closing the notice sheet clears it |
+
+The **Work queue** stat card counts the notices the API flags `in_queue` (an `exceeds` outcome and a comment window
+that has not closed). Clicking it sets `outcome=exceeds&open=true&sort=days_left.asc`, which lists the same notices; the
+**Window not closed** filter is the `open` param.
+
+The **chat panel** (`risk-chat.tsx`) answers questions about stored results. In view scope it opens as a right sheet
+from **Ask about this view** and sends the table's filtered `ntc_id`s in sort order, plus the active filters as
+labels. In notice scope the **Ask** button in the notice sheet widens it and shows the chat as a column beside the
+details (stacked above them below `lg`). The server builds the context from stored results and the method doc, so the
+browser never sends record data. Answers are labelled "Explanation, not assessment". Conversations live in page
+memory per scope and are lost on reload; only the open state is in the URL. When `GET /api/risk/chat` reports
+`enabled: false`, the panel shows the reason and the composer is disabled.
 
 Components: `risk-header.tsx` (issue picker, Assess button with 3 s job polling, Method popover), `risk-table.tsx`,
 `notice-sheet.tsx` (detail), `risk-chart.tsx` (inline-SVG likelihood–consequence chart), `hazard-inventory.tsx`,
-`risk-compare.tsx`, `outcome-badge.tsx` and `risk-meta.ts`. Chart series use the `--series-1..5` tokens, so the
+`risk-compare.tsx`, `risk-chat.tsx`, `outcome-badge.tsx` and `risk-meta.ts`. Chart series use the `--series-1..5` tokens, so the
 status tokens stay reserved for state.
 
 ## `/stations` (stations map)
@@ -56,7 +70,7 @@ draws them.
 
 | Mark | Meaning |
 |---|---|
-| Colour | TX-frequency bin: <30 MHz, 30–300 MHz, 300 MHz–1 GHz, 1–3 GHz, 3–10 GHz, ≥10 GHz. An ordinal one-hue ramp in the `--band-0..5` tokens, validated with the dataviz ramp checks in both themes |
+| Colour | TX-frequency bin, split where the disc's meaning changes: <30 MHz (below P.1546, no disc), 30–470 MHz (disc to the T/R 25-08 trigger), 470 MHz–1 GHz and 1–4 GHz (disc to the map threshold), >4 GHz (above P.1546, no disc). 470 MHz and 4000 MHz are inclusive upper limits, as in the standards. The 1 GHz split only breaks up a large group and carries no regulatory meaning. An ordinal one-hue ramp in the `--band-0..4` tokens, validated with the dataviz ramp checks in both themes |
 | Disc | Radius where the ITU-R P.1546-6 field strength falls to the threshold: 50% locations, receiver 10 m, rural, land path, flat terrain (`h1` = antenna AGL), omnidirectional at maximum e.r.p. The threshold is the T/R 25-08 trigger in 29.7–470 MHz and the slider value elsewhere. Solid outline: radius solved in 1–1000 km. Dashed: below 1 km (drawn at 1 km) or 1000 km and more |
 | No disc | 429 stations: 328 without power, 98 outside 30–4000 MHz, 3 without TX frequency. The sheet gives the reason. A missing or >3000 m antenna height also gives no disc, and a station without a position is left off the map |
 | Arrow | Azimuth of a directional station, `min(radius, 20 km)` long (5 km without a disc) |
@@ -70,7 +84,7 @@ dots.
 
 | Param | Values |
 |---|---|
-| `band` | Comma-separated bins `0`–`5` (deduplicated), or `none`; absent means all. Stations without a TX frequency are never hidden by the band filter |
+| `band` | Comma-separated bins `0`–`4` (deduplicated), or `none`; absent means all. Stations without a TX frequency are never hidden by the band filter |
 | `q` | Digits of a station number |
 | `station` | `source_row`; opens the detail sheet |
 | `view` | `2d` (default) or `3d` (55° pitch, columns) |

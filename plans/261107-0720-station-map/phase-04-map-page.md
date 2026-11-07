@@ -30,7 +30,7 @@ Load the `dataviz` skill before choosing the band palette and building the legen
 | `frontend/src/components/station-legend.tsx` | **New.** Band colours, the model statement, the threshold source, the exaggeration slider. |
 | `frontend/src/components/station-sheet.tsx` | **New.** Parameters with units, the contour (inputs, threshold and citation, assumptions, P.1546 intermediates), the no-contour reason, M4 overlaps, quality flags, `source_row`. |
 | `frontend/src/pages/stations.tsx` | **New.** |
-| `frontend/src/router.tsx` | `/stations` with `validateSearch`: `band` (comma-separated 0–5), `q` (digits), `station` (int > 0), `view` (`2d`/`3d`), `t` (1/10/50), `thr` (-20 to 120). |
+| `frontend/src/router.tsx` | `/stations` with `validateSearch`: `band` (comma-separated 0–4), `q` (digits), `station` (int > 0), `view` (`2d`/`3d`), `t` (1/10/50), `thr` (-20 to 120). |
 | `frontend/src/components/app-shell.tsx` | A NAV entry "Stations map" (lucide `MapPin`) and its title. |
 | `frontend/src/index.css` | `--band-0..5` tokens for light and dark, if needed. Import the maplibre CSS. |
 | `.env.example` | `VITE_MAP_TILE_URL`. |
