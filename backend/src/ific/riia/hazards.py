@@ -92,6 +92,8 @@ class Geometry:
     constellation: Constellation | None = None
     missing_reason: str | None = None
     fallback_sats: int = 1
+    min_alt_km: float | None = None
+    heo: bool = False
     inputs: list[dict[str, Any]] = field(default_factory=list)
     assumptions: list[str] = field(default_factory=list)
 

@@ -11,7 +11,7 @@ from ific.riia.assess import apply_as_of, queue_sort_key, technical_sort_key
 from ific.riia.hazards import OUTCOME_RANK
 
 DOMAIN = "space"
-_LIST_DROP = ("hazards", "curve_grid_db")
+_LIST_DROP = ("hazards", "curve_grid_db", "pfd_checks")
 
 
 def _utc(epoch_us: int | None) -> datetime | None:
@@ -238,7 +238,7 @@ def get_notice(
         return None
     out = _stamp(json.loads(rows[0][0]), rows[0][1], as_of)
     if sensitive:
-        for h in out["hazards"]:
+        for h in out["hazards"] + (out.get("pfd_checks") or []):
             for a in h["assumptions"]:
                 a["sensitive"] = a["id"] in sensitive
     return out

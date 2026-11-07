@@ -3,7 +3,7 @@ import { Fragment, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import type { Hazard } from '@/lib/api'
+import type { Assumption, Hazard, HazardInput } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { OutcomeBadge } from './outcome-badge'
 import { HAZARD_MODE_META, TIER_META, formatBand, formatDb, formatShare, formatTimePct } from './risk-meta'
@@ -11,8 +11,76 @@ import { TermHint } from './term-hint'
 
 const COLUMNS = ['Mode', 'Service', 'Band', 'Tier', 'Outcome', 'Share violating', 'Exceedance (median / P95)', 'Worst case']
 
-function SectionTitle({ children }: { children: string }) {
+export function SectionTitle({ children }: { children: string }) {
   return <h4 className="mb-1.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">{children}</h4>
+}
+
+export function CitationList({ citations }: { citations: string[] }) {
+  if (!citations.length) return null
+  return (
+    <section>
+      <SectionTitle>Citations</SectionTitle>
+      <ul className="list-disc space-y-0.5 pl-4">
+        {citations.map((cite) => (
+          <li key={cite}>{cite}</li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+export function AssumptionList({ assumptions, outcomeSensitive }: { assumptions: Assumption[]; outcomeSensitive: Set<string> }) {
+  if (!assumptions.length) return null
+  return (
+    <section>
+      <SectionTitle>Assumptions</SectionTitle>
+      <ul className="space-y-1.5">
+        {assumptions.map((a) => {
+          const sensitive = a.sensitive || outcomeSensitive.has(a.id)
+          return (
+            <li key={a.id} className={cn('rounded-md px-2 py-1.5', sensitive ? 'bg-status-warning/15' : 'bg-muted/50')}>
+              {sensitive && (
+                <span className="mb-0.5 flex items-center gap-1 font-medium">
+                  <TriangleAlert className="size-3" aria-hidden /> Outcome-sensitive
+                </span>
+              )}
+              <code className="mr-1 font-mono text-[11px] text-muted-foreground">{a.id}</code>
+              {a.text}
+            </li>
+          )
+        })}
+      </ul>
+    </section>
+  )
+}
+
+export function InputList({ inputs, empty }: { inputs: HazardInput[]; empty: string }) {
+  return (
+    <section className="min-w-0">
+      <SectionTitle>Inputs</SectionTitle>
+      {inputs.length ? (
+        <ul className="divide-y rounded-md border">
+          {inputs.map((input) => (
+            <li key={input.name} className="space-y-0.5 px-2 py-1.5">
+              <div className="flex flex-wrap items-baseline gap-x-2">
+                <span className="font-medium">{input.name}</span>
+                <span className="tabular-nums">
+                  {input.value ?? '—'}
+                  {input.unit ? ` ${input.unit}` : ''}
+                </span>
+                <Badge variant="outline" className="ml-auto h-4 px-1.5 font-mono text-[10px]">
+                  {input.source}
+                </Badge>
+              </div>
+              <div className="text-muted-foreground">{input.cite}</div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-muted-foreground">{empty}</p>
+      )}
+    </section>
+  )
 }
 
 function HazardDetails({ hazard, outcomeSensitive }: { hazard: Hazard; outcomeSensitive: Set<string> }) {
@@ -40,65 +108,10 @@ function HazardDetails({ hazard, outcomeSensitive }: { hazard: Hazard; outcomeSe
             </ul>
           </section>
         )}
-        {hazard.citations.length > 0 && (
-          <section>
-            <SectionTitle>Citations</SectionTitle>
-            <ul className="list-disc space-y-0.5 pl-4">
-              {hazard.citations.map((cite) => (
-                <li key={cite}>{cite}</li>
-              ))}
-            </ul>
-          </section>
-        )}
-        {hazard.assumptions.length > 0 && (
-          <section>
-            <SectionTitle>Assumptions</SectionTitle>
-            <ul className="space-y-1.5">
-              {hazard.assumptions.map((a) => {
-                const sensitive = a.sensitive || outcomeSensitive.has(a.id)
-                return (
-                  <li
-                    key={a.id}
-                    className={cn('rounded-md px-2 py-1.5', sensitive ? 'bg-status-warning/15' : 'bg-muted/50')}
-                  >
-                    {sensitive && (
-                      <span className="mb-0.5 flex items-center gap-1 font-medium">
-                        <TriangleAlert className="size-3" aria-hidden /> Outcome-sensitive
-                      </span>
-                    )}
-                    <code className="mr-1 font-mono text-[11px] text-muted-foreground">{a.id}</code>
-                    {a.text}
-                  </li>
-                )
-              })}
-            </ul>
-          </section>
-        )}
+        <CitationList citations={hazard.citations} />
+        <AssumptionList assumptions={hazard.assumptions} outcomeSensitive={outcomeSensitive} />
       </div>
-      <section className="min-w-0">
-        <SectionTitle>Inputs</SectionTitle>
-        {hazard.inputs.length ? (
-          <ul className="divide-y rounded-md border">
-            {hazard.inputs.map((input) => (
-              <li key={input.name} className="space-y-0.5 px-2 py-1.5">
-                <div className="flex flex-wrap items-baseline gap-x-2">
-                  <span className="font-medium">{input.name}</span>
-                  <span className="tabular-nums">
-                    {input.value ?? '—'}
-                    {input.unit ? ` ${input.unit}` : ''}
-                  </span>
-                  <Badge variant="outline" className="ml-auto h-4 px-1.5 font-mono text-[10px]">
-                    {input.source}
-                  </Badge>
-                </div>
-                <div className="text-muted-foreground">{input.cite}</div>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-muted-foreground">No inputs recorded for this hazard.</p>
-        )}
-      </section>
+      <InputList inputs={hazard.inputs} empty="No inputs recorded for this hazard." />
     </div>
   )
 }

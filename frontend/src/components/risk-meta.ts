@@ -11,6 +11,7 @@ import type {
   RegulatorySummary,
   Stage,
 } from '@/lib/api'
+import { toCsv } from '@/lib/csv'
 
 const MONTE_CARLO =
   'the Monte Carlo method: a simulation that draws thousands of random receiver positions, antenna pointings and, for non-GSO systems, satellite positions, computes the interference for each draw and counts how often it is above the protection level'
@@ -42,7 +43,7 @@ export const WORK_QUEUE_DESCRIPTION =
  * `window_not_closed`, which decides `in_queue` together with an `exceeds` outcome. */
 export const windowNotClosed = ({ regulatory: r }: NoticeSummary) => r.days_left == null || r.days_left >= 0
 
-export const WORK_QUEUE_FILTER = { outcome: 'exceeds', open: true, br: undefined, sort: 'days_left.asc' } as const
+export const WORK_QUEUE_FILTER = { outcome: 'exceeds', open: true, br: undefined, pfd: undefined, sort: 'days_left.asc' } as const
 
 export const OUTCOME_ORDER: Outcome[] = ['exceeds', 'not_assessed', 'meets', 'screened_out', 'not_applicable']
 
@@ -90,6 +91,50 @@ export const OUTCOME_META: Record<
     swatch: 'bg-status-neutral',
     badge: 'bg-muted text-muted-foreground',
   },
+}
+
+export type PfdFilter = 'exceeds' | 'near' | 'any_limit'
+export const PFD_FILTERS: readonly PfdFilter[] = ['exceeds', 'near', 'any_limit']
+
+export const PFD_FILTER_LABEL: Record<PfdFilter, string> = {
+  exceeds: 'pfd exceeds',
+  near: 'pfd near limit',
+  any_limit: 'A Table 21-4 limit was evaluated',
+}
+
+export const PFD_TERMS = {
+  check:
+    'RR Article 21, Table 21-4 sets the highest power flux-density (pfd) a space station may produce on the Earth\'s surface. This check computes the worst pfd over Finland for each space-to-Earth group and compares it with the limit. It is a limit on the transmitter, separate from the receiver hazards, and it does not change the worst outcome.',
+  pfd: 'Power flux-density on the ground: transmitted power in the reference bandwidth, plus satellite gain toward the point, minus free-space spreading 10·log10(4πd²). In dB(W/m²).',
+  refBw: 'The bandwidth the Table 21-4 limit is expressed in (4 kHz or 1 MHz, for example). A carrier narrower than it counts with its whole power.',
+  delta: 'Angle of arrival δ: the elevation of the satellite above the horizontal plane at the point. Table 21-4 limits are lowest near the horizon, where terrestrial links point.',
+  margin: 'pfd minus the Table 21-4 limit at the same δ. Above 0 dB the limit is exceeded; within 3 dB below it the check is near the limit.',
+  review: 'The Table 21-4 transcription in data/ref/rr21_pfd_limits.json is pending review: check the row against the RR before relying on it.',
+}
+
+export type PfdReading = 'exceeds' | 'near' | 'meets' | 'not_assessed' | 'no_limit' | 'reassess'
+
+export function pfdReading(n: Pick<NoticeSummary, 'pfd_outcome' | 'pfd_near_limit'>): PfdReading {
+  if (n.pfd_outcome == null) return 'reassess'
+  if (n.pfd_outcome === 'exceeds') return 'exceeds'
+  if (n.pfd_outcome === 'not_assessed') return 'not_assessed'
+  if (n.pfd_near_limit) return 'near'
+  return n.pfd_outcome === 'not_applicable' ? 'no_limit' : 'meets'
+}
+
+export const PFD_READING_META: Record<PfdReading, { label: string; className: string; swatch?: string }> = {
+  exceeds: { label: 'Exceeds', className: 'font-medium text-status-critical-foreground', swatch: 'bg-status-critical' },
+  near: { label: 'Near limit', className: 'text-foreground', swatch: 'bg-status-warning' },
+  meets: { label: 'Meets', className: 'text-status-good-foreground', swatch: 'bg-status-good' },
+  not_assessed: { label: 'Not assessed', className: 'text-muted-foreground' },
+  no_limit: { label: 'No limit', className: 'text-muted-foreground' },
+  reassess: { label: 'Re-assess', className: 'text-muted-foreground italic' },
+}
+
+export function matchesPfdFilter(n: NoticeSummary, filter: PfdFilter): boolean {
+  if (filter === 'exceeds') return n.pfd_outcome === 'exceeds'
+  if (filter === 'near') return Boolean(n.pfd_near_limit)
+  return n.max_pfd_margin_db != null
 }
 
 export const HAZARD_MODE_META: Record<HazardMode, { label: string; color: string }> = {
@@ -225,5 +270,64 @@ export function hasDominantCurve(curves: number[][]): boolean {
   const EPS = 1e-9
   return curves.some((upper, i) =>
     curves.every((other, j) => i === j || other.every((value, k) => (upper[k] ?? 0) + EPS >= value)),
+  )
+}
+
+export const NOTICE_CSV_HEADER = [
+  'ntc_id',
+  'sat_name',
+  'adm',
+  'prov',
+  'stage',
+  'ntc_type',
+  'orbit',
+  'act_code',
+  'worst_outcome',
+  ...OUTCOME_ORDER.map((o) => `hazards_${o}`),
+  'services_exceeding',
+  'services_assessed',
+  'max_share_violating',
+  'max_median_exceedance_db',
+  'max_worst_case_db',
+  'pfd_outcome',
+  'max_pfd_margin_db',
+  'in_queue',
+  'window_open',
+  'd_wic',
+  'window_end',
+  'days_left',
+  'fin_identified',
+]
+
+/** One row per notice with raw values (share 0–1, dB, ISO dates); no score or rank column. */
+export function noticesCsv(notices: NoticeSummary[], serviceLabel: (id: string) => string): string {
+  const services = (ids: string[]) => ids.map(serviceLabel).join('; ')
+  return toCsv(
+    NOTICE_CSV_HEADER,
+    notices.map((n) => [
+      n.ntc_id,
+      n.sat_name,
+      n.adm,
+      n.prov,
+      n.regulatory.stage,
+      n.ntc_type,
+      n.orbit,
+      n.act_code,
+      n.worst_outcome,
+      ...OUTCOME_ORDER.map((o) => n.hazard_counts[o] ?? 0),
+      services(n.services_exceeding),
+      services(n.services_assessed),
+      n.max_share_violating,
+      n.max_median_exceedance_db,
+      n.max_worst_case_db,
+      n.pfd_outcome,
+      n.max_pfd_margin_db,
+      n.in_queue,
+      n.regulatory.window_open,
+      n.regulatory.d_wic,
+      n.regulatory.window_end,
+      n.regulatory.days_left,
+      n.regulatory.fin_identified,
+    ]),
   )
 }

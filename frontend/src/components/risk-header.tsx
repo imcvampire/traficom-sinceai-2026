@@ -1,19 +1,17 @@
-import { useQuery } from '@tanstack/react-query'
-import { BookOpen, CircleAlert, ExternalLink, LoaderCircle, Play, RotateCw, Users } from 'lucide-react'
+import { CircleAlert, LoaderCircle, Play, RotateCw, Users } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Skeleton } from '@/components/ui/skeleton'
 import type { IssueOut } from '@/lib/api'
 import { formatDate, formatDateTime } from '@/lib/format'
-import { errorText, riskModelQuery, useAssessIssue } from '@/lib/queries'
+import { useAssessIssue } from '@/lib/queries'
 import { RECEIVER_SOURCE_LABEL } from './risk-meta'
+import { MethodSheet } from './risk-method'
 
 function issueState(issue: IssueOut): string {
   const { job } = issue
@@ -21,73 +19,6 @@ function issueState(issue: IssueOut): string {
   if (job.status === 'failed') return 'Assessment failed'
   if (issue.assessed) return `Assessed${issue.notice_count != null ? ` · ${issue.notice_count} notices` : ''}`
   return issue.ingested ? 'Not assessed' : 'Not ingested'
-}
-
-function MethodPopover() {
-  const model = useQuery(riskModelQuery)
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="outline" size="sm">
-          <BookOpen aria-hidden /> Method
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="max-h-[70vh] w-[min(36rem,calc(100vw-2rem))] gap-4 overflow-y-auto p-4">
-        {model.isPending ? (
-          <div className="space-y-2">
-            <Skeleton className="h-5 w-40" />
-            <Skeleton className="h-24" />
-            <Skeleton className="h-24" />
-          </div>
-        ) : model.isError ? (
-          <p className="text-sm text-status-critical-foreground">Could not load the method: {errorText(model.error)}</p>
-        ) : (
-          <>
-            <div>
-              <h3 className="font-semibold">Risk-informed assessment, {model.data.model_version}</h3>
-              <p className="text-xs text-muted-foreground">
-                Four steps, each grounded in its source. No step combines results into a score.
-              </p>
-            </div>
-            <ol className="space-y-3">
-              {model.data.method_steps.map((step) => (
-                <li key={step.step} className="space-y-1">
-                  <div className="text-sm font-medium">
-                    Step {step.step}: {step.what}
-                  </div>
-                  <blockquote className="border-l-2 pl-2 text-xs text-muted-foreground italic">
-                    “{step.source_wording}”
-                  </blockquote>
-                  <div className="text-xs text-muted-foreground">{step.cite}</div>
-                </li>
-              ))}
-            </ol>
-            <div className="space-y-1.5">
-              <h4 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">References</h4>
-              <ul className="space-y-1.5 text-xs">
-                {model.data.references.map((ref) => (
-                  <li key={ref.url}>
-                    <a
-                      href={ref.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 font-medium text-primary underline-offset-4 hover:underline"
-                    >
-                      {ref.title} <ExternalLink className="size-3" aria-hidden />
-                    </a>
-                    <div className="text-muted-foreground">{ref.supports}</div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <p className="border-t pt-3 text-xs text-muted-foreground">
-              Full method, inputs and known weaknesses: <code className="font-mono text-foreground">{model.data.doc_path}</code>
-            </p>
-          </>
-        )}
-      </PopoverContent>
-    </Popover>
-  )
 }
 
 type RiskHeaderProps = {
@@ -158,7 +89,7 @@ export function RiskHeader({ issues, issue, asOf, asOfIsToday, modelVersion, onI
               )}
               {running ? 'Assessing…' : issue.assessed ? 'Re-assess' : 'Assess'}
             </Button>
-            <MethodPopover />
+            <MethodSheet />
           </div>
         </div>
 

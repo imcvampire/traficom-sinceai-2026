@@ -31,11 +31,18 @@ import {
   OUTCOME_META,
   OUTCOME_ORDER,
   ORBIT_LABEL,
+  PFD_FILTER_LABEL,
+  PFD_FILTERS,
+  PFD_READING_META,
+  PFD_TERMS,
   STAGE_SHORT,
   compareOutcomes,
   daysLeftText,
   formatDb,
   formatShare,
+  matchesPfdFilter,
+  pfdReading,
+  type PfdFilter,
   windowNotClosed,
 } from './risk-meta'
 
@@ -47,11 +54,12 @@ export type RiskTableView = {
   orbit?: OrbitType
   open?: boolean
   br?: boolean
+  pfd?: PfdFilter
   q?: string
   sort?: string
 }
 
-export const RISK_SORT_RE = /^(outcome|network|adm|prov|share|exceedance|days_left|fin)\.(asc|desc)$/
+export const RISK_SORT_RE = /^(outcome|network|adm|prov|share|exceedance|pfd|days_left|fin)\.(asc|desc)$/
 
 const PAGE_SIZE = 25
 const ALL = '__all'
@@ -65,6 +73,7 @@ const FILTER_COLUMNS = {
   orbit: 'orbit',
   open: 'days_left',
   br: 'fin',
+  pfd: 'pfd',
 } as const
 const FILTER_KEYS = Object.keys(FILTER_COLUMNS) as (keyof typeof FILTER_COLUMNS)[]
 
@@ -188,6 +197,29 @@ function useColumns(serviceLabel: (id: string) => string, onOpen: (ntcId: number
         ),
       },
       {
+        id: 'pfd',
+        accessorFn: (n) => n.max_pfd_margin_db ?? undefined,
+        header: 'pfd vs Art. 21',
+        sortUndefined: 'last',
+        filterFn: (row, _id, value: PfdFilter) => matchesPfdFilter(row.original, value),
+        meta: { align: 'right', hint: PFD_TERMS.check },
+        cell: ({ row }) => {
+          const reading = pfdReading(row.original)
+          const meta = PFD_READING_META[reading]
+          const margin = row.original.max_pfd_margin_db
+          return (
+            <span
+              className={cn('inline-flex items-center gap-1.5 whitespace-nowrap tabular-nums', meta.className)}
+              title={reading === 'reassess' ? 'Assessed before the pfd check existed: re-assess to compute' : meta.label}
+            >
+              {meta.swatch && <span className={cn('size-2 rounded-full', meta.swatch)} aria-hidden />}
+              {margin != null ? formatDb(margin) : meta.label}
+              {margin != null && <span className="sr-only">{meta.label}</span>}
+            </span>
+          )
+        },
+      },
+      {
         id: 'days_left',
         accessorFn: (n) => (windowOpen(n) ? n.regulatory.days_left : undefined),
         header: 'Days left',
@@ -307,6 +339,10 @@ export function RiskTable({
       orbit: (Object.keys(ORBIT_LABEL) as OrbitType[])
         .filter((o) => data.some((n) => n.orbit === o))
         .map((o) => ({ value: o, label: ORBIT_LABEL[o] })),
+      pfd: PFD_FILTERS.map((f) => ({
+        value: f,
+        label: `${PFD_FILTER_LABEL[f]} (${data.filter((n) => matchesPfdFilter(n, f)).length})`,
+      })),
     }),
     [data, serviceLabel],
   )
@@ -431,6 +467,12 @@ export function RiskTable({
           value={view.orbit}
           options={options.orbit}
           onChange={(orbit) => set({ orbit: orbit as OrbitType | undefined })}
+        />
+        <FilterSelect
+          label="pfd checks"
+          value={view.pfd}
+          options={options.pfd}
+          onChange={(pfd) => set({ pfd: pfd as PfdFilter | undefined })}
         />
         <div className="relative col-span-2 sm:ml-auto sm:w-64">
           <Search

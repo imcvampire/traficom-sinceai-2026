@@ -8,8 +8,8 @@ from typing import Any
 
 import duckdb
 
-from ific.riia import MODEL_VERSION
-from ific.riia.assess import assess_issue
+from ific.riia import MODEL_VERSION, pfd
+from ific.riia.assess import _load_geometry, _load_notices, assess_issue, pfd_results
 from ific.riia.hazards import Overrides
 from ific.riia.receivers import ReceiverPopulation
 
@@ -75,6 +75,39 @@ PERTURBATIONS: tuple[Perturbation, ...] = (
         ("fixed",),
     ),
 )
+
+
+@dataclass(frozen=True)
+class PfdPerturbation:
+    """A pfd-check assumption moved to one end; only the deterministic Table 21-4 check is re-run."""
+
+    assumption_id: str
+    end: str
+    label: str
+    params: pfd.Params
+
+
+PFD_PERTURBATIONS: tuple[PfdPerturbation, ...] = (
+    PfdPerturbation("pfd_near_db", "high", "pfd near-limit margin 6 dB", pfd.Params(near_db=6.0)),
+    PfdPerturbation(
+        "pfd_peak_gain",
+        "low",
+        "Satellite gain −10 dB (beam not pointed at Finland)",
+        pfd.Params(gain_offset_db=-10),
+    ),
+    PfdPerturbation(
+        "pfd_peak_gain",
+        "high",
+        "Peak gain toward Finland even with a boresight",
+        pfd.Params(use_boresight=False),
+    ),
+    PfdPerturbation(
+        "cpfd_min_delta",
+        "low",
+        "Notified pfd compared at the highest δ seen from Finland",
+        pfd.Params(cpfd_delta="max"),
+    ),
+)
 NOT_PERTURBED = {
     "grid": "Grid density changes only the number of sites, not any per-receiver level; not re-run for cost.",
     "sample_size": "Fixed by the method (N rule); reproducibility is checked by the determinism test.",
@@ -119,6 +152,35 @@ def compare(
     }
 
 
+def compare_pfd(base: list[dict[str, Any]], perturbed: dict[int, dict[str, Any]]) -> dict[str, Any]:
+    """A flip: the pfd outcome changes to or from `exceeds`; near-limit changes are counted apart."""
+    flips, shifts, near = [], [], 0
+    for r in sorted(base, key=lambda r: r["ntc_id"]):
+        b = perturbed.get(r["ntc_id"])
+        if b is None or r.get("pfd_outcome") is None:
+            continue
+        oa, ob = r["pfd_outcome"], b["pfd_outcome"]
+        near += r["pfd_near_limit"] != b["pfd_near_limit"]
+        if (oa == "exceeds") != (ob == "exceeds"):
+            flips.append(
+                (
+                    (r["ntc_id"], "pfd"),
+                    f"{oa}{' near' * r['pfd_near_limit']}",
+                    f"{ob}{' near' * b['pfd_near_limit']}",
+                )
+            )
+        if r["max_pfd_margin_db"] is not None and b["max_pfd_margin_db"] is not None:
+            shifts.append(b["max_pfd_margin_db"] - r["max_pfd_margin_db"])
+    return {
+        "flips": flips,
+        "median_shift_db": median(shifts) if shifts else None,
+        "max_abs_shift_db": max((abs(s) for s in shifts), default=None),
+        "mean_share_change": None,
+        "hazards_compared": len(shifts),
+        "near_changes": near,
+    }
+
+
 def run(
     con: duckdb.DuckDBPyConnection,
     ific_no: int,
@@ -138,6 +200,12 @@ def run(
         )
         scope = [r for r in base if only is None or r["ntc_id"] in only]
         c = compare(scope, perturbed, p.classes)
+        rows.append({"perturbation": p, **c})
+        flips[p.assumption_id] = flips.get(p.assumption_id, 0) + len(c["flips"])
+    notices, geoms = _load_notices(con, ific_no), _load_geometry(con, ific_no)
+    for p in PFD_PERTURBATIONS:
+        log(f"sensitivity {p.assumption_id} ({p.end})")
+        c = compare_pfd(base, pfd_results(notices, geoms, p.params))
         rows.append({"perturbation": p, **c})
         flips[p.assumption_id] = flips.get(p.assumption_id, 0) + len(c["flips"])
     return rows, flips
@@ -160,6 +228,9 @@ def report(
         " deterministic.",
         "- A flip is a quantified hazard whose outcome changes to or from `exceeds`. Shifts are in the worst"
         " median `exceedance_db` of each hazard assessed in both runs.",
+        "- For the pfd-check assumptions (`pfd_*`, `cpfd_*`), a flip is a notice whose Table 21-4 outcome"
+        " changes to or from `exceeds`; near-limit changes are given in the Change column; shifts are in"
+        " `max_pfd_margin_db`.",
         "",
         "## Outcome-sensitive assumptions",
         "",
@@ -177,7 +248,9 @@ def report(
         p = r["perturbation"]
         share = "—" if r["mean_share_change"] is None else f"{r['mean_share_change'] * 100:+.1f} pp"
         lines.append(
-            f"| `{p.assumption_id}` | {p.end} | {p.label} | {len(r['flips'])} | "
+            f"| `{p.assumption_id}` | {p.end} | {p.label}"
+            + (f" ({r['near_changes']} near-limit changes)" if r.get("near_changes") else "")
+            + f" | {len(r['flips'])} | "
             f"{_fmt(r['median_shift_db'])} | "
             f"{_fmt(r['max_abs_shift_db'])} | {share} |"
         )

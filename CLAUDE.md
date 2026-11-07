@@ -8,10 +8,10 @@ that only talks to the API through the `/api` proxy. Setup, data locations, CLI 
 
 ## Commands
 
-Tools are pinned in `mise.toml` (Python 3.12, uv, Bun, Node). `mdbtools` (`mdb-export`) must be installed on the system.
+Tools are pinned in `mise.toml` (Python 3.12, uv, Bun, Node). `mdbtools` (`mdb-export`) is not pinned by mise; `mise run install` installs it through brew/apt-get/dnf if missing.
 
 ```sh
-mise run install          # uv sync (backend) + bun install (frontend)
+mise run install          # mdbtools if missing, uv sync (backend), bun install (frontend)
 mise run dev              # API :8000 (reload) + Vite :5173 (strictPort: free the port, don't change it)
 mise run lint             # ruff check + ruff format --check (backend), oxlint (frontend)
 mise run test             # backend: uv run pytest -q (there are no frontend tests)
@@ -38,7 +38,8 @@ One DuckDB file (`var/db/ific.duckdb`) with three schemas, created in `backend/s
 - `ref`: reference data loaded at API startup (`m4.ensure_m4`, `special_interest.ensure_special_interest`),
   tracked by sha256 in `ref.source` so unchanged inputs are not reloaded.
 - `space`: Space IFIC tables ingested from `.mdb` files via `mdb-export` (`ingest.py`), tagged with `ific_no`. Ingest
-  is a no-op when the file's sha256 is unchanged. The schema is `space`, not `ific`, because `ific` would be
+  is a no-op when the file's sha256 and the table set (`ingest.TABLES`, recorded in `space.issue.filters`) are
+  unchanged, so adding a table re-loads existing issues. The schema is `space`, not `ific`, because `ific` would be
   ambiguous with the catalog name.
 - `analytics`: derived `risk_*` tables written by `riia/store.py`, keyed by `(ific_no, receiver_source)`; one
   transaction replaces an issue's whole assessment.
@@ -67,6 +68,10 @@ docstrings quote it. Read it before changing the model.
   receiver source means adding a population, not changing the hazard code.
 - `jobs.py` runs one background job per `(ific_no, receiver_source)` on its own thread and cursor; a second request
   while one runs gets 409. `store.py` persists results and serves them to the API.
+- `pfd.py` is the RR Table 21-4 check (`pfd_checks`, `pfd_outcome`, `max_pfd_margin_db` on each notice): worst
+  pfd on Finnish territory per Table 21-4 row, deterministic, versioned as `pfd_check_version` (not
+  `model_version`, which seeds the RNG). Limits are in `data/ref/rr21_pfd_limits.json`, loaded by `pfd_limits.py`;
+  every encoded row has a hand-typed cross-check in `tests/test_riia_pfd_limits.py`. It never sets `worst_outcome`.
 - `consistency.py`, `sensitivity.py` and `review.py` produce the validation and expert-triage reports from stored
   results.
 

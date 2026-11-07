@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { ApiError, type Draft, type DraftPolishRejection } from '@/lib/api'
+import { saveFile } from '@/lib/download'
 import { chatStatusQuery, draftQuery, errorText, usePolishDraft } from '@/lib/queries'
 import { DRAFT_BANNER, DRAFT_KIND_META } from './risk-meta'
 import { TermHint } from './term-hint'
@@ -32,13 +33,6 @@ function windowText(d: Draft): string {
   if (d.window_end == null) return `no comment window at ${d.stage}`
   if (d.days_left != null && d.days_left >= 0) return `${d.days_left} days left (window ends ${d.window_end})`
   return `window closed on ${d.window_end}`
-}
-
-function saveFile(name: string, text: string) {
-  const url = URL.createObjectURL(new Blob([text], { type: 'text/markdown;charset=utf-8' }))
-  const a = Object.assign(document.createElement('a'), { href: url, download: name })
-  a.click()
-  URL.revokeObjectURL(url)
 }
 
 /** Mounted per notice and `as_of` (keyed by the sheet), so a polished letter never outlives its inputs. */
@@ -161,7 +155,7 @@ export function NoticeDraft({ ificNo, ntcId, asOf, assessedAt }: NoticeDraftProp
           <Button variant="outline" size="sm" onClick={copy}>
             <Copy aria-hidden /> Copy
           </Button>
-          <Button variant="outline" size="sm" onClick={() => saveFile(fileName, letter)}>
+          <Button variant="outline" size="sm" onClick={() => saveFile(fileName, letter, 'text/markdown;charset=utf-8')}>
             <Download aria-hidden /> Download .md
           </Button>
           {polishReason ? (

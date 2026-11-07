@@ -2,6 +2,7 @@ import { createRootRoute, createRoute, createRouter, lazyRouteComponent } from '
 import { AppShell } from '@/components/app-shell'
 import { THRESHOLD_RANGE, type StationsSearch } from '@/components/station-meta'
 import type { FilesTableView } from '@/components/files-table'
+import { PFD_FILTERS, type PfdFilter } from '@/components/risk-meta'
 import { RISK_SORT_RE } from '@/components/risk-table'
 import type { FileStatus, OrbitType, Outcome } from '@/lib/api'
 import { NotFound } from '@/pages/not-found'
@@ -67,6 +68,7 @@ const riskRoute = createRoute({
       orbit: ORBITS.includes(search.orbit as OrbitType) ? (search.orbit as OrbitType) : undefined,
       open: asFlag(search.open),
       br: asFlag(search.br),
+      pfd: PFD_FILTERS.includes(search.pfd as PfdFilter) ? (search.pfd as PfdFilter) : undefined,
       q: asText(search.q),
       sort: sort && RISK_SORT_RE.test(sort) ? sort : undefined,
       ntc: asId(search.ntc),

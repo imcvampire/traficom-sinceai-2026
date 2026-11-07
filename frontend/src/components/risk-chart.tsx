@@ -141,7 +141,7 @@ export function RiskChart({ grid, curves, criteria = [], worstCases = [], ariaLa
             </g>
           ))}
           <text x={MARGIN.left + innerW / 2} y={height - 6} textAnchor="middle" className="fill-muted-foreground text-[11px]">
-            Consequence x (dB, I/N or pfd margin)
+            Consequence x (dB): I/N, or spfd margin for radio astronomy
           </text>
           <text
             transform={`translate(14 ${MARGIN.top + innerH / 2}) rotate(-90)`}

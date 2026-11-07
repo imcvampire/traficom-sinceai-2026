@@ -12,11 +12,12 @@ from typing import Any
 import duckdb
 import numpy as np
 
-from ific.riia import MODEL_VERSION, antenna, curves, emission, hazards, regulatory
+from ific.riia import MODEL_VERSION, antenna, curves, emission, hazards, pfd, regulatory
 from ific.riia.geometry import haversine_km
 from ific.riia.hazards import Geometry, Grp, HazardReceivers, Overrides
 from ific.riia.orbits import Constellation
-from ific.riia.receivers import Receiver, ReceiverClass, ReceiverPopulation, load_classes
+from ific.riia.pfd_limits import HEO_APOGEE_KM, HEO_INCL_DEG, load_limits
+from ific.riia.receivers import Receiver, ReceiverClass, ReceiverPopulation, finland_grid, load_classes
 from ific.special_interest import parse_designator_bandwidth_hz
 
 log = logging.getLogger("ific.riia")
@@ -68,6 +69,8 @@ class _Notice:
     has_mask: bool = False
     findings: list[regulatory.Finding] = field(default_factory=list)
     es_points: list[tuple[float, float]] = field(default_factory=list)
+    pfd_groups: list[pfd.PfdGroup] = field(default_factory=list)
+    pfd_notified: list[pfd.NotifiedPfd] = field(default_factory=list)
 
 
 def _bn_hz(designator: str | None, bdwdth_khz: float | None) -> float | None:
@@ -99,17 +102,36 @@ def _load_notices(con: duckdb.DuckDBPyConnection, ific_no: int) -> dict[int, _No
         notices[ntc_id] = _Notice(ntc_id, prov, adm, ntc_type, act_code, d_wic, name)
 
     cpfd: dict[int, list[tuple[float, float, float, float | None]]] = defaultdict(list)
-    for ntc_id, lo, hi, pfd, bw in con.execute(
-        "SELECT ntc_id, freq_min, freq_max, pfd, bdwdth FROM space.c_pfd WHERE ific_no = ? AND pfd IS NOT "
-        "NULL ORDER BY ntc_id, seq_no",
+    for ntc_id, lo, hi, val, bw, ra in con.execute(
+        "SELECT ntc_id, freq_min, freq_max, pfd, bdwdth, ra_stn_type FROM space.c_pfd WHERE ific_no = ? AND "
+        "pfd IS NOT NULL ORDER BY ntc_id, seq_no",
         [ific_no],
     ).fetchall():
-        cpfd[ntc_id].append((lo * 1e6, hi * 1e6, pfd, bw))
+        cpfd[ntc_id].append((lo * 1e6, hi * 1e6, val, bw))
+        if ntc_id in notices and not ra:
+            notices[ntc_id].pfd_notified.append(
+                pfd.NotifiedPfd(lo * 1e6, hi * 1e6, val, bw * 1e3 if bw else None)
+            )
     for (ntc_id,) in con.execute(
         "SELECT DISTINCT ntc_id FROM space.mask_info WHERE ific_no = ?", [ific_no]
     ).fetchall():
         if ntc_id in notices:
             notices[ntc_id].has_mask = True
+    pfd_masks: dict[int, list[tuple[float, float]]] = defaultdict(list)
+    for ntc_id, lo, hi in con.execute(
+        "SELECT ntc_id, freq_min, freq_max FROM space.mask_info WHERE ific_no = ? AND f_mask = 'P'", [ific_no]
+    ).fetchall():
+        pfd_masks[ntc_id].append((lo * 1e9, hi * 1e9))
+    stn_cls: dict[int, list[str]] = defaultdict(list)
+    if con.execute(
+        "SELECT 1 FROM information_schema.tables WHERE table_schema = 'space' AND table_name = 'srv_cls'"
+    ).fetchone():
+        for grp_id, cls in con.execute(
+            "SELECT DISTINCT grp_id, stn_cls FROM space.srv_cls WHERE ific_no = ? AND stn_cls IS NOT NULL "
+            "ORDER BY 1, 2",
+            [ific_no],
+        ).fetchall():
+            stn_cls[grp_id].append(cls)
 
     rows = con.execute(
         """
@@ -125,6 +147,8 @@ def _load_notices(con: duckdb.DuckDBPyConnection, ific_no: int) -> dict[int, _No
         [ific_no],
     ).fetchall()
     best: dict[int, tuple] = {}
+    pfd_meta: dict[int, tuple] = {}
+    pfd_emissions: dict[int, list[pfd.Emission]] = defaultdict(list)
     for ntc_id, grp_id, emi_rcp, fmin, fmax, bdw, des, pep, pds, gain, blon, blat, maj, mn in rows:
         n = notices.get(ntc_id)
         if n is None:
@@ -135,6 +159,9 @@ def _load_notices(con: duckdb.DuckDBPyConnection, ific_no: int) -> dict[int, _No
         if n.ntc_type not in ("G", "N") or fmin is None:
             continue
         bn = _bn_hz(des, bdw) or max((fmax - fmin) * 1e6, 1e3)
+        pfd_meta.setdefault(grp_id, (ntc_id, fmin, fmax, gain, blon, blat, maj, mn))
+        if pep is not None or pds is not None:
+            pfd_emissions[grp_id].append(pfd.Emission.of(pep, pds, bn, fmin * 1e6))
         if pep is not None:
             dens, p = pep - 10 * math.log10(bn), pep
         elif pds is not None:
@@ -148,6 +175,23 @@ def _load_notices(con: duckdb.DuckDBPyConnection, ific_no: int) -> dict[int, _No
     for v in best.values():
         if v[8] is not None:
             notice_gain[v[0]] = max(notice_gain.get(v[0], -math.inf), float(v[8]))
+    for grp_id, (ntc_id, fmin, fmax, own_gain, blon, blat, maj, mn) in pfd_meta.items():
+        gain = own_gain if own_gain is not None else notice_gain.get(ntc_id)
+        lo, hi = fmin * 1e6, fmax * 1e6
+        notices[ntc_id].pfd_groups.append(
+            pfd.PfdGroup(
+                grp_id,
+                lo,
+                hi,
+                tuple(pfd_emissions.get(grp_id, ())),
+                float(gain) if gain is not None else None,
+                (blon, blat) if blon is not None and blat is not None else None,
+                ((maj + (mn or maj)) / 4) if maj else None,
+                tuple(stn_cls.get(grp_id, ())),
+                any(m_lo < hi and lo < m_hi for m_lo, m_hi in pfd_masks.get(ntc_id, ())),
+                own_gain is None and gain is not None,
+            )
+        )
     for ntc_id, grp_id, dens, bn, p, fmin, fmax, _bdw, gain, blon, blat, maj, mn in best.values():
         if gain is None:
             gain = notice_gain.get(ntc_id)
@@ -259,6 +303,8 @@ def _load_geometry(con: duckdb.DuckDBPyConnection, ific_no: int) -> dict[int, Ge
         out[ntc_id] = Geometry(
             "ngso",
             constellation=const,
+            min_alt_km=min(r[0] - r[4] for r in rows),
+            heo=any(r[0] > HEO_APOGEE_KM and HEO_INCL_DEG[0] <= r[1] <= HEO_INCL_DEG[1] for r in rows),
             inputs=[
                 _input(
                     "Constellation",
@@ -752,11 +798,13 @@ def summarise(hazard_list: list[dict[str, Any]], classes: dict[str, ReceiverClas
 
 def technical_sort_key(n: dict[str, Any]) -> tuple:
     """Doc, 'Sorting a list of notices': "1. Outcome: exceeds, then not_assessed only, then meets, then
-    screened_out. 2. Largest share_violating. 3. Largest median exceedance_db. 4. ntc_id." """
+    screened_out. 2. Largest share_violating. 3. Largest median exceedance_db. 4. ntc_id." The pfd outcome
+    breaks ties before ntc_id; results stored before the pfd check sort last among ties."""
     return (
         hazards.OUTCOME_RANK[n["worst_outcome"]],
         -(n["max_share_violating"] or 0.0),
         -(n["max_median_exceedance_db"] if n["max_median_exceedance_db"] is not None else -math.inf),
+        hazards.OUTCOME_RANK.get(n.get("pfd_outcome"), len(hazards.OUTCOME_RANK)),
         n["ntc_id"],
     )
 
@@ -788,6 +836,31 @@ def orbit_type(ntc_type: str) -> str:
     return {"G": "gso", "N": "ngso"}.get(ntc_type, "es")
 
 
+def pfd_results(
+    notices: dict[int, _Notice], geoms: dict[int, Geometry], params: pfd.Params = pfd.DEFAULT_PARAMS
+) -> dict[int, dict[str, Any]]:
+    """The Table 21-4 pfd check of every notice (doc: 'pfd on Finnish territory vs RR Table 21-4')."""
+    limits, grid = load_limits(), pfd.Grid.of(finland_grid())
+    out = {}
+    for n in notices.values():
+        try:
+            checks = pfd.notice_checks(
+                n.pfd_groups,
+                n.pfd_notified,
+                geoms.get(n.ntc_id),
+                n.ntc_type,
+                n.act_code,
+                limits,
+                grid,
+                params,
+            )
+        except Exception as e:
+            log.warning("pfd check ntc=%d failed: %s", n.ntc_id, e)
+            checks = pfd.failed(f"pfd check failed: {e}", orbit_type(n.ntc_type), limits)
+        out[n.ntc_id] = pfd.summarise(checks, limits)
+    return out
+
+
 def assess_issue(
     con: duckdb.DuckDBPyConnection,
     ific_no: int,
@@ -798,6 +871,7 @@ def assess_issue(
     only: set[int] | None = None,
     classes: tuple[str, ...] = (),
     stats_out: dict[str, float] | None = None,
+    pfd_params: pfd.Params = pfd.DEFAULT_PARAMS,
 ) -> list[dict[str, Any]]:
     """Assess every notice of `ific_no`; returns NoticeAssessment dicts in technical sort order."""
     started = time.perf_counter()
@@ -809,6 +883,7 @@ def assess_issue(
     geoms = _load_geometry(con, ific_no)
     pop = _index_population(population.receivers(con), cf.classes)
     all_pairs = _pairs(con, notices, pop, ov.adj_extent_bn)
+    pfd_out = pfd_results(notices, geoms, pfd_params)
     finland = (pop.site_lat, pop.site_lon)
     stats = defaultdict(float)
     results = []
@@ -865,6 +940,7 @@ def assess_issue(
                 "step": curves.GRID_STEP_DB,
             },
             **summary,
+            **pfd_out[n.ntc_id],
             "regulatory": reg,
             "hazards": hazard_list,
         }

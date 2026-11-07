@@ -10,6 +10,10 @@ inferred from the database and the SNS field names, not from the PDF):
   verbatim.
 - `tr_aff_ntw` lists networks the BR found affected; `adm` and `sat_name` name the affected network (FIN10300
   and FIN10400 at 22.8°E in 3074).
+- Units differ between tables (BR IFIC Preface, Section III): `grp` and `c_pfd` frequencies are in MHz,
+  `mask_info.freq_min/max` in GHz (3074: `5.925`), `c_pfd.bdwdth` in kHz.
+- `srv_cls` gives each group's class of station (`stn_cls`, Preface Table 3) and nature of service (`nat_srv`,
+  Table 4); the pfd check matches Table 21-4 rows on the space-station class.
 """
 
 import csv
@@ -74,6 +78,7 @@ TABLES: dict[str, str | None] = {
     "orbit": None,
     "c_pfd": None,
     "mask_info": None,
+    "srv_cls": None,
     "srv_area": None,
     "e_stn": None,
     "es_ctry": None,
@@ -208,11 +213,16 @@ def _display(path: Path) -> str:
     return path.relative_to(PROJECT_ROOT).as_posix() if path.is_relative_to(PROJECT_ROOT) else path.name
 
 
+def manifest_filters() -> str:
+    """Tables loaded and row filters applied; a change re-loads issues whose file is unchanged."""
+    return "; ".join([f"tables: {','.join(sorted(TABLES))}", *(f"{t}: {w}" for t, w in TABLES.items() if w)])
+
+
 def ensure_issue(
     con: duckdb.DuckDBPyConnection, ific_no: int, path: Path, export: Exporter | None = None
 ) -> IssueStatus:
-    """Load one Space IFIC issue. Unchanged sha256 is a no-op; a changed file replaces that issue's rows
-    atomically.
+    """Load one Space IFIC issue. Unchanged sha256 and table set is a no-op; otherwise that issue's rows are
+    replaced atomically.
     """
     export = export or mdb_export
     started = time.perf_counter()
@@ -221,9 +231,9 @@ def ensure_issue(
     ensure_schema(con)
     sha = _sha256(path)
     manifest = con.execute(
-        "SELECT sha256, notice_count FROM space.issue WHERE ific_no = ?", [ific_no]
+        "SELECT sha256, notice_count, filters FROM space.issue WHERE ific_no = ?", [ific_no]
     ).fetchone()
-    if manifest and manifest[0] == sha:
+    if manifest and manifest[0] == sha and manifest[2] == manifest_filters():
         ms = round((time.perf_counter() - started) * 1000)
         log.info("ific=%d up to date (%d notices, %d ms)", ific_no, manifest[1], ms)
         return IssueStatus(ific_no, "up_to_date", manifest[1], ms)
@@ -241,10 +251,9 @@ def ensure_issue(
                 if _table_exists(con, table):
                     con.execute(f'DELETE FROM space."{table}" WHERE ific_no = ?', [ific_no])
                 counts[table] = _load_table(con, ific_no, table, out)
-            filters = "; ".join(f"{t}: {w}" for t, w in TABLES.items() if w)
             con.execute(
                 "INSERT OR REPLACE INTO space.issue VALUES (?, ?, ?, ?, ?, ?, current_timestamp)",
-                [ific_no, _display(path), sha, path.stat().st_size, counts["notice"], filters],
+                [ific_no, _display(path), sha, path.stat().st_size, counts["notice"], manifest_filters()],
             )
             con.execute("COMMIT")
         except BaseException as e:

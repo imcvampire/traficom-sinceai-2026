@@ -149,6 +149,10 @@ export type NoticeSummary = {
   max_share_violating: number | null
   max_median_exceedance_db: number | null
   max_worst_case_db: number | null
+  /** RR Table 21-4 check; null on results stored before it existed (re-assess to compute). */
+  pfd_outcome?: Outcome | null
+  max_pfd_margin_db?: number | null
+  pfd_near_limit?: boolean | null
   in_queue: boolean
   regulatory: RegulatorySummary
 }
@@ -216,6 +220,29 @@ export type Finding = {
 
 export type CurveGrid = { start: number; stop: number; step: number }
 
+export type PfdCheck = {
+  check_id: string
+  grp_id: number | null
+  n_groups: number
+  n_groups_exceeding: number
+  row_id: string | null
+  band_hz: [number, number] | null
+  service: string | null
+  orbit: OrbitType
+  ref_bw_hz: number | null
+  source: 'calculated' | 'notified' | null
+  pfd_dbw_m2: number | null
+  limit_dbw_m2: number | null
+  delta_deg: number | null
+  margin_db: number | null
+  outcome: Outcome
+  near_limit: boolean
+  reason: string | null
+  inputs: HazardInput[]
+  citations: string[]
+  assumptions: Assumption[]
+}
+
 export type NoticeDetail = NoticeSummary & {
   model_version: string
   receiver_source: ReceiverSource
@@ -223,6 +250,10 @@ export type NoticeDetail = NoticeSummary & {
   assessed_at: string
   curve_grid_db: CurveGrid
   hazards: Hazard[]
+  pfd_checks?: PfdCheck[] | null
+  pfd_check_version?: string | null
+  pfd_limits_sha256?: string | null
+  pfd_limits_review?: string | null
   regulatory: RegulatorySummary & {
     window_cite: string | null
     findings: Finding[]
@@ -238,6 +269,10 @@ export type ReceiverClass = {
   gain_dbi: number
   nf_db: number
   bw_hz: number
+  acs_db: number
+  min_elev_deg: number
+  /** Citation per characteristic, keyed by field name (pattern, gain_dbi, nf_db, bw_hz, acs_db, min_elev_deg). */
+  cites: Record<string, string>
   criteria: Criterion[]
   distributions: { param: string; kind: string; low: number; high: number; source: 'assumption'; cite: string }[]
 }

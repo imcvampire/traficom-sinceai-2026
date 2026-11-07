@@ -16,6 +16,7 @@ def test_fixture_load_types_and_filters(tmp_path: Path) -> None:
     assert con.execute("SELECT count(*) FROM space.provn").fetchone()[0] == 1
     assert con.execute("SELECT count(*) FROM space.tr_aff_ntw").fetchone()[0] == 1
     assert con.execute("SELECT count(*) FROM space.mask_info").fetchone()[0] == 0
+    assert con.execute("SELECT count(*) FROM space.srv_cls").fetchone()[0] == 8
     types = dict(
         con.execute(
             "SELECT column_name, data_type FROM information_schema.columns "
@@ -37,6 +38,15 @@ def test_second_call_is_noop_and_changed_hash_reloads(tmp_path: Path) -> None:
     status = ingest.ensure_issue(con, FIXTURE_ISSUE, path, export=fixture_exporter)
     assert status.action == "loaded" and status.notices == 5
     assert con.execute("SELECT count(*) FROM space.notice").fetchone()[0] == 5
+
+
+def test_changed_table_set_reloads_an_unchanged_file(tmp_path: Path) -> None:
+    con = loaded_db(tmp_path)
+    path = tmp_path / f"ific{FIXTURE_ISSUE}.mdb"
+    con.execute("UPDATE space.issue SET filters = 'tables: notice'")
+    assert ingest.ensure_issue(con, FIXTURE_ISSUE, path, export=fixture_exporter).action == "loaded"
+    assert ingest.ensure_issue(con, FIXTURE_ISSUE, path, export=fixture_exporter).action == "up_to_date"
+    assert "srv_cls" in con.execute("SELECT filters FROM space.issue").fetchone()[0]
 
 
 def test_failure_rolls_back_to_previous_rows(tmp_path: Path) -> None:

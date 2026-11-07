@@ -1,0 +1,9 @@
+grp_id,seq_no,stn_cls,nat_srv
+2001,1,"EC","CP"
+2001,2,"EK","OT"
+2002,1,"EC","CP"
+2003,1,"EC","CR"
+2003,2,"XX","CR"
+2004,1,"TC","CP"
+2005,1,"EC","CP"
+2006,1,"EC","CP"

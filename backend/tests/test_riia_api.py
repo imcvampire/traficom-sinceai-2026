@@ -77,6 +77,9 @@ def test_assess_then_read(risk_client: TestClient) -> None:
     assert detail["regulatory"]["days_left"] == 114 and detail["regulatory"]["findings"]
     assert {h["mode"] for h in detail["hazards"]} >= {"cochannel", "es_terrestrial", "blocking_im"}
     assert detail["curve_grid_db"] == {"start": -40.0, "stop": 40.0, "step": 1.0}
+    assert detail["pfd_outcome"] == "meets" and detail["pfd_limits_review"] == "pending"
+    assert detail["pfd_checks"][0]["row_id"] == "t21-4-10700-11700-fss-gso"
+    assert {n["ntc_id"]: n["pfd_outcome"] for n in listing["notices"]}[1002] == "exceeds"
     later = risk_client.get(f"/api/risk/issues/{FIXTURE_ISSUE}/notices/1001?as_of=2026-11-06").json()
     assert later["hazards"] == detail["hazards"] and later["regulatory"]["days_left"] == -14
     assert risk_client.get(f"/api/risk/issues/{FIXTURE_ISSUE}/notices/42").status_code == 404
@@ -93,6 +96,11 @@ def test_model_endpoint(risk_client: TestClient) -> None:
     assert [s["step"] for s in model["method_steps"]] == [1, 2, 3, 4]
     assert {c["id"] for c in model["receiver_classes"]} >= {"fixed", "radio_astronomy", "metsat_es"}
     assert all(i["cite"] for i in model["inputs"])
+    fixed = next(c for c in model["receiver_classes"] if c["id"] == "fixed")
+    assert set(fixed["cites"]) == {"pattern", "gain_dbi", "nf_db", "bw_hz", "acs_db", "min_elev_deg"}
+    assert all(fixed["cites"].values())
+    assert fixed["acs_db"] == 45.0
+    assert {d["param"] for d in fixed["distributions"]} == {"azimuth_deg", "pointing_elev_deg", "height_m"}
     assert model["doc_path"] == "docs/interference-risk-assessment.md"
 
 

@@ -37,7 +37,8 @@ and never shows a composite score. All state is in the URL, and invalid values a
 | `orbit` | `gso`, `ngso`, `es` |
 | `open` | `true`: hide notices whose comment window has closed by the `as_of` date (keeps open windows and stages without one) |
 | `br` | `true`: only notices where the BR identified Finland (`provn` or `tr_aff_ntw` lists FIN) |
-| `sort` | `<column>.(asc\|desc)`; without it the table keeps the server's technical order (worst outcome, share violating, median exceedance, `ntc_id`) |
+| `pfd` | RR Table 21-4 check: `exceeds` (pfd above a limit on Finnish territory), `near` (within 3 dB below a limit), `any_limit` (at least one row was evaluated) |
+| `sort` | `<column>.(asc\|desc)`, columns `outcome`, `network`, `adm`, `prov`, `share`, `exceedance`, `pfd`, `days_left`, `fin`; without it the table keeps the server's technical order (worst outcome, share violating, median exceedance, pfd outcome, `ntc_id`) |
 | `ntc` | Opens the detail sheet for that notice, so a detail view can be shared |
 | `compare` | Comma-separated `ntc_id` list for the compare view |
 | `as_of` | `YYYY-MM-DD` evaluation date for the regulatory context; omitted means today |
@@ -47,6 +48,20 @@ and never shows a composite score. All state is in the URL, and invalid values a
 The **Work queue** stat card counts the notices the API flags `in_queue` (an `exceeds` outcome and a comment window
 that has not closed). Clicking it sets `outcome=exceeds&open=true&sort=days_left.asc`, which lists the same notices; the
 **Window not closed** filter is the `open` param.
+
+The **pfd vs Art. 21** column shows `max_pfd_margin_db` (pfd minus the Table 21-4 limit) coloured by the pfd outcome:
+`exceeds`, near limit, `meets`, "No limit" (no Table 21-4 row applies, greyed, not green) and "Re-assess" for results
+stored before the check existed. The notice sheet lists every check under **pfd limits (RR Art. 21, Table 21-4)**,
+with inputs, citations and assumptions per row, and a "review pending" banner while the Table 21-4 transcription is
+unreviewed. The column and the section do not change the worst outcome or the work queue.
+
+**Download CSV** saves the notices the table shows (after filters, search and sort, across all pages, in table order)
+to `ific<no>-notices-<as_of>.csv`. It is built in the browser from the loaded notice list, one row per notice, with
+raw values: share violating as 0–1, dB as numbers, ISO dates, `true`/`false`, empty cells for nulls, and service labels
+joined by `; `. The file is UTF-8 with a BOM so Excel reads non-ASCII names, and text cells that start with `=`, `+`,
+`-` or `@` get a leading `'` so spreadsheets do not run them as formulas. There is no score or rank column. Regulatory
+columns follow the page's `as_of`. The `pfd_outcome` and `max_pfd_margin_db` columns are empty for results stored
+before the pfd check.
 
 The **chat panel** (`risk-chat.tsx`) answers questions about stored results. In view scope it opens as a right sheet
 from **Ask about this view** and sends the table's filtered `ntc_id`s in sort order, plus the active filters as
@@ -64,7 +79,7 @@ template and lists the protected tokens that changed. The polish button is disab
 reports the LLM is off. Reviewer notes sit in a collapsed "Internal – do not send" block. Every view carries the
 "DRAFT – for expert review, not sent" banner.
 
-Components: `risk-header.tsx` (issue picker, Assess button with 3 s job polling, Method popover), `risk-table.tsx`,
+Components: `risk-header.tsx` (issue picker, Assess button with 3 s job polling), `risk-method.tsx` (Method & parameters sheet: method steps, model settings, assumptions with outcome-sensitive ones flagged, receiver-class characteristics with citations and Monte Carlo distributions, input sources), `risk-table.tsx`,
 `notice-sheet.tsx` (detail), `risk-chart.tsx` (inline-SVG likelihood–consequence chart), `hazard-inventory.tsx`,
 `risk-compare.tsx`, `risk-chat.tsx`, `notice-draft.tsx`, `outcome-badge.tsx` and `risk-meta.ts`. Chart series use the `--series-1..5` tokens, so the
 status tokens stay reserved for state.

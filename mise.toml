@@ -8,8 +8,29 @@ node = "24.22.2"
 UV_PYTHON_PREFERENCE = "only-system"
 UV_PYTHON_DOWNLOADS = "never"
 
+[tasks.mdbtools]
+description = "Install mdbtools (mdb-export) with the system package manager if it is missing"
+run = '''
+set -eu
+if command -v mdb-export >/dev/null 2>&1; then
+  exit 0
+fi
+if command -v brew >/dev/null 2>&1; then
+  brew install mdbtools
+elif command -v apt-get >/dev/null 2>&1; then
+  sudo apt-get update && sudo apt-get install -y mdbtools
+elif command -v dnf >/dev/null 2>&1; then
+  sudo dnf install -y mdbtools
+else
+  echo "mdbtools not found and no supported package manager (brew, apt-get, dnf); install it manually" >&2
+  exit 1
+fi
+command -v mdb-export >/dev/null 2>&1 || { echo "mdb-export still not on PATH after install" >&2; exit 1; }
+'''
+
 [tasks.install]
-description = "Install backend and frontend dependencies"
+description = "Install mdbtools, backend and frontend dependencies"
+depends = ["mdbtools"]
 run = [
   "uv sync --project backend",
   "bun install --cwd frontend",

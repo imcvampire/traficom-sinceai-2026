@@ -48,8 +48,14 @@ def summary_snapshot(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def checks(results: list[dict[str, Any]]) -> dict[str, Any]:
     per_class: dict[str, Counter] = defaultdict(Counter)
-    tier_violations, bad_exceeds, br_rows = [], [], []
+    tier_violations, bad_exceeds, br_rows, pfd_violations = [], [], [], []
+    pfd_counts: Counter = Counter()
     for r in results:
+        if r.get("pfd_outcome") is not None:
+            pfd_counts[r["pfd_outcome"]] += 1
+            exceeding = any((c["margin_db"] or 0) > 0 for c in r["pfd_checks"])
+            if (r["pfd_outcome"] == "exceeds") != exceeding:
+                pfd_violations.append(r["ntc_id"])
         quantified = [h for h in r["hazards"] if h["mode"] in QUANTIFIED_MODES]
         for h in quantified:
             per_class[h["service_class"]][h["outcome"]] += 1
@@ -84,6 +90,8 @@ def checks(results: list[dict[str, Any]]) -> dict[str, Any]:
         "tier_violations": tier_violations,
         "bad_exceeds": bad_exceeds,
         "br": br_rows,
+        "pfd_counts": pfd_counts,
+        "pfd_violations": pfd_violations,
     }
 
 
@@ -115,6 +123,10 @@ def report(ific_no: int, as_of: str, results: list[dict[str, Any]], stats: dict[
         f"{'pass' if not c['bad_exceeds'] else 'FAIL'} ({len(c['bad_exceeds'])} notices) |",
         f"| BR identified Finland under a technical provision → at least one live hazard | "
         f"{len(agree)} of {len(br)} agree, {len(misses)} misses |",
+        f"| pfd `exceeds` ⇔ some Table 21-4 check has a positive margin | "
+        f"{'pass' if not c['pfd_violations'] else 'FAIL'} ({len(c['pfd_violations'])} notices) |",
+        "",
+        "- pfd vs RR Table 21-4: " + ", ".join(f"{o} {c['pfd_counts'].get(o, 0)}" for o in outcomes) + ".",
         "",
         "## Outcomes per service class (quantified modes)",
         "",

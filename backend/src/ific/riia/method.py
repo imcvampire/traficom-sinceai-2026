@@ -2,8 +2,9 @@
 
 from typing import Any
 
-from ific.riia import MODEL_VERSION, antenna, curves, emission
+from ific.riia import MODEL_VERSION, antenna, curves, emission, pfd
 from ific.riia.assess import ASSUMPTIONS
+from ific.riia.pfd_limits import CLASS_CITE, load_limits
 from ific.riia.receivers import load_classes
 
 TAC = "FCC TAC, A Quick Introduction to Risk-Informed Interference Assessment, v1.00 (2015)"
@@ -88,6 +89,7 @@ REFERENCES = [
 
 def describe(outcome_sensitive: list[str]) -> dict[str, Any]:
     cf = load_classes()
+    limits = load_limits()
     classes = []
     for raw in cf.raw["classes"]:
         cls = cf.classes[raw["id"]]
@@ -100,6 +102,9 @@ def describe(outcome_sensitive: list[str]) -> dict[str, Any]:
                 "gain_dbi": cls.gain_dbi,
                 "nf_db": cls.nf_db,
                 "bw_hz": cls.bw_hz,
+                "acs_db": cls.acs_db,
+                "min_elev_deg": cls.min_elev_deg,
+                "cites": cls.cites,
                 "criteria": [vars(c) for c in cls.criteria],
                 "distributions": [vars(d) for d in cls.distributions.values()],
             }
@@ -128,11 +133,18 @@ def describe(outcome_sensitive: list[str]) -> dict[str, Any]:
         {"name": "Spurious limit", "source": "rr", "cite": emission.SPURIOUS_CITE},
         {"name": "Comment windows", "source": "rr", "cite": "data/ref/rr_comment_windows.json"},
         {
+            "name": f"pfd limits on the Earth's surface (pfd check {pfd.PFD_CHECK_VERSION})",
+            "source": "rr",
+            "cite": f"{limits.cite}, data/ref/rr21_pfd_limits.json (review {limits.review_status})",
+        },
+        {"name": "Space-station classes", "source": "data", "cite": f"space.srv_cls; {CLASS_CITE}"},
+        {
             "name": "Thermal noise, geometry, link budget",
             "source": "physics",
             "cite": "k·T0; spherical Earth",
         },
         *({"name": k, "source": "assumption", "cite": v} for k, v in ASSUMPTIONS.items()),
+        *({"name": k, "source": "assumption", "cite": v} for k, v in pfd.ASSUMPTIONS.items()),
     ]
     return {
         "model_version": MODEL_VERSION,

@@ -204,3 +204,17 @@ def test_triage_uses_the_same_readings(con: duckdb.DuckDBPyConnection) -> None:
     by_id = {r["ntc_id"]: r for r in rows}
     assert by_id[1001]["group"] == "A" and by_id[1001]["exceeds"][0].startswith("cochannel:fixed ")
     assert 1004 not in by_id and 1005 not in by_id
+    assert by_id[1001]["pfd_outcome"] == "meets" and by_id[1001]["pfd_rows"] == []
+
+
+def test_triage_puts_pfd_exceedances_first(con: duckdb.DuckDBPyConnection) -> None:
+    from ific.riia import review
+
+    rows, excluded = review.triage(con, FIXTURE_ISSUE, AS_OF)
+    assert rows[0]["ntc_id"] == 1002 and rows[0]["group"] == "P"
+    assert rows[0]["max_pfd_margin_db"] > 0
+    assert rows[0]["pfd_rows"][0].startswith("t21-4-11700-12500-fss-ngso grp 2003")
+    header = review.to_csv(rows).splitlines()[0].split(",")
+    assert {"pfd_outcome", "max_pfd_margin_db", "pfd_rows"} <= set(header)
+    text = review.report(FIXTURE_ISSUE, AS_OF, rows, excluded)
+    assert "## P. pfd exceeds an RR Table 21-4 limit" in text and "pending review" in text

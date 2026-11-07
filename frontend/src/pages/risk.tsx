@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { getRouteApi, Link } from '@tanstack/react-router'
-import { CircleAlert, Flag, ListTodo, MessageSquare, OctagonAlert, Radar } from 'lucide-react'
+import { CircleAlert, Download, Flag, ListTodo, MessageSquare, OctagonAlert, Radar } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 import { NoticeSheet } from '@/components/notice-sheet'
 import { OutcomeBadge } from '@/components/outcome-badge'
@@ -12,8 +12,10 @@ import {
   ORBIT_LABEL,
   OUTCOME_META,
   OUTCOME_ORDER,
+  PFD_FILTER_LABEL,
   WORK_QUEUE_DESCRIPTION,
   WORK_QUEUE_FILTER,
+  noticesCsv,
   todayIso,
 } from '@/components/risk-meta'
 import { RiskTable, type RiskTableView } from '@/components/risk-table'
@@ -25,6 +27,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import type { ChatMessage, NoticeSummary, Outcome } from '@/lib/api'
+import { saveFile } from '@/lib/download'
 import { errorText, riskIssuesQuery, riskModelQuery, riskNoticesQuery } from '@/lib/queries'
 
 export type RiskSearch = RiskTableView & {
@@ -88,20 +91,22 @@ export function RiskPage() {
       orbit: search.orbit,
       open: search.open,
       br: search.br,
+      pfd: search.pfd,
       q: search.q,
       sort: search.sort,
     }),
-    [search.outcome, search.service, search.adm, search.prov, search.orbit, search.open, search.br, search.q, search.sort],
+    [search.outcome, search.service, search.adm, search.prov, search.orbit, search.open, search.br, search.pfd, search.q, search.sort],
   )
   const setTableView = useCallback(
-    ({ outcome, service, adm, prov, orbit, open, br, q, sort }: RiskTableView) =>
-      patch({ outcome, service, adm, prov, orbit, open, br, q, sort }),
+    ({ outcome, service, adm, prov, orbit, open, br, pfd, q, sort }: RiskTableView) =>
+      patch({ outcome, service, adm, prov, orbit, open, br, pfd, q, sort }),
     [patch],
   )
   const inQueueView =
     search.outcome === WORK_QUEUE_FILTER.outcome &&
     search.open === WORK_QUEUE_FILTER.open &&
     !search.br &&
+    !search.pfd &&
     search.sort === WORK_QUEUE_FILTER.sort
   const selected = useMemo(() => (search.compare ? search.compare.split(',').map(Number) : []), [search.compare])
 
@@ -128,11 +133,12 @@ export function RiskPage() {
       ['orbit', search.orbit && ORBIT_LABEL[search.orbit]],
       ['comment window', search.open ? 'not closed' : undefined],
       ['BR identified Finland', search.br ? 'yes' : undefined],
+      ['pfd vs RR Table 21-4', search.pfd && PFD_FILTER_LABEL[search.pfd]],
       ['search', search.q],
       ['sort', search.sort],
     ]
     return Object.fromEntries(entries.filter((e): e is [string, string] => Boolean(e[1])))
-  }, [search.outcome, search.service, search.adm, search.prov, search.orbit, search.open, search.br, search.q, search.sort, serviceLabel])
+  }, [search.outcome, search.service, search.adm, search.prov, search.orbit, search.open, search.br, search.pfd, search.q, search.sort, serviceLabel])
   const chatScope: ChatScope =
     search.ntc != null ? { kind: 'notice', ntcId: search.ntc } : { kind: 'view', ids: visibleIds, filters: chatFilters }
   const threadKey =
@@ -154,6 +160,12 @@ export function RiskPage() {
       className={chatScope.kind === 'notice' ? 'h-full' : 'flex-1'}
     />
   )
+
+  const downloadCsv = () => {
+    const byId = new Map((technical.data?.notices ?? []).map((n) => [n.ntc_id, n]))
+    const rows = visibleIds.flatMap((id) => byId.get(id) ?? [])
+    saveFile(`ific${ificNo}-notices-${asOf}.csv`, noticesCsv(rows, serviceLabel), 'text/csv;charset=utf-8')
+  }
 
   const summary = useMemo(() => {
     const notices = technical.data?.notices ?? []
@@ -330,12 +342,29 @@ export function RiskPage() {
           <section className="min-w-0 space-y-3" aria-label="Notices">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">
-                Sorted by worst outcome, share violating, median exceedance, then notice id, unless a column is sorted.
+                Sorted by worst outcome, share violating, median exceedance, pfd outcome, then notice id, unless a column is sorted.
               </p>
               {technical.data && (
-                <Button variant="outline" size="sm" onClick={() => patch({ chat: true })}>
-                  <MessageSquare aria-hidden /> Ask about this view
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      {/* A disabled button gets no pointer events, so the span carries the tooltip. */}
+                      <span tabIndex={visibleIds.length ? undefined : 0}>
+                        <Button variant="outline" size="sm" onClick={downloadCsv} disabled={!visibleIds.length}>
+                          <Download aria-hidden /> Download CSV
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {visibleIds.length
+                        ? `The ${visibleIds.length} notices the table shows, in table order, across all pages`
+                        : 'No notices match the filters'}
+                    </TooltipContent>
+                  </Tooltip>
+                  <Button variant="outline" size="sm" onClick={() => patch({ chat: true })}>
+                    <MessageSquare aria-hidden /> Ask about this view
+                  </Button>
+                </div>
               )}
             </div>
             <RiskTable

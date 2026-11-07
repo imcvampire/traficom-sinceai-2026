@@ -195,9 +195,88 @@ The issue table needs a default order. It sorts by readings off the curves, neve
 3. Largest median `exceedance_db`.
 4. `ntc_id`.
 
+When two notices tie on these keys, the pfd check below breaks the tie (`exceeds` first). It never moves a notice
+past another with a different hazard outcome.
+
 The expert can re-sort by any reported quantity. Two curves can cross, so one notice is "riskier" than another only
 when its curve lies above the other's everywhere. The comparison view overlays the curves of selected notices so this
 can be seen.
+
+## pfd on Finnish territory vs RR Table 21-4
+
+The hazards above ask whether a modelled Finnish receiver is harmed. A second, independent question is whether the
+space station respects the power flux-density limits of RR Article 21, Section V, Table 21-4 (Edition of 2024,
+Rev.WRC-23) on Finnish territory. A Table 21-4 limit is a regulatory limit on the transmitter, not a receiver
+protection criterion: it has no likelihood, receiver count or curve. Its result is kept apart from the hazards, as
+the notice's `pfd_checks` list, and it does not set `worst_outcome`. The check is deterministic: no Monte Carlo and no
+receiver population. Its version is `pfd_check_version = "art21-1"`, separate from `model_version`, so it can change
+without changing any Monte Carlo seed.
+
+**Limits.** `data/ref/rr21_pfd_limits.json` holds every Table 21-4 entry that can apply in Finland (Region 1),
+one row per band and service/orbit split, each with its table page, footnotes and citation. A limit is a
+piecewise-linear function of the angle of arrival δ (degrees above the horizontal plane), which expresses every
+"A for 0–5°, A + k(δ − 5) for 5–25°, B for 25–90°" entry exactly. The 17.7–19.3 GHz non-GSO FSS entry subtracts the
+function X(N) of footnote 21.16.6 at low δ, with N the number of satellites of the notified constellation. Entries
+the encoding cannot evaluate stay in the file with `encoded: false` and a reason. They are the 3.4–4.2 GHz non-GSO
+FSS entry (Y depends on co-frequency satellites per hemisphere), the 9.9–10.4 GHz EESS (active) mean pfd, the
+27.5–30 GHz inter-satellite entry (Resolution 679 methodology), the 18.6–18.8 GHz footnote limit, and others named
+in the file. Entries that apply only in Regions 2 or 3, or only in countries listed in a footnote that does not name
+Finland (Nos. 5.381, 5.382, 5.404, 5.453, 5.455, 5.494, 5.496, 5.549), are listed under `excluded`. The transcription
+has `review.status: pending` until a person signs it off, and the UI and the reports say so.
+
+**Which rows apply to a group.** A space-to-Earth group g and a row r match when the bands overlap, one of the
+group's space-station classes (`srv_cls.stn_cls`, BR Preface Table 3) belongs to a service of the row, and the orbit
+matches (`gso`, `ngso` or `any`; some non-GSO rows apply only to, or never to, orbits with apogee above 18 000 km and
+inclination between 35° and 145°, per footnotes 21.16.6C, 21.16.17 and 21.16.18). Rows limited to systems of at most
+99 satellites (footnote 21.16.4) give `not_assessed` for larger constellations.
+
+**pfd in the reference bandwidth.** For each emission of the group, the pfd at a point on the ground is
+
+```text
+pfd_ref = P_ref + G_s(point) − 10·log10(4π·d(point)²)                     dB(W/m²) in B_ref
+P_ref   = D + 10·log10(B_ref)    if B_n ≥ B_ref,   D = pwr_ds_max, or pep_max − 10·log10(B_n)
+P_ref   = P                      if B_n < B_ref    (the whole carrier power counts)
+margin  = pfd_ref − limit_r(δ(point))
+```
+
+with B_n the necessary bandwidth of the emission designator. The strongest emission of the group counts. A
+`pwr_ds_max` that puts more power in its AP4 averaging band (4 kHz below 15 GHz, 1 MHz above) than `pep_max` in the
+whole carrier is a data error (91 emissions of 3074 have one, for example +73 dB(W/Hz) for −73); the check then uses
+`pep_max` and records assumption `pfd_density_inconsistent`. A group whose beam has no gain takes the highest beam gain
+of the notice, as the hazards do (assumption `pfd_notice_gain`).
+
+- **GSO.** The points are the Finland grid cells of the generic population (0.25° × 0.5°). δ and d are computed
+  from the satellite at its nominal longitude and at both station-keeping tolerance edges, and the worst margin over
+  points and positions is kept. `G_s` is the S.672 pattern around the notified boresight, or the peak gain when the
+  beam has no boresight (assumption `pfd_peak_gain`).
+- **Non-GSO.** δ is swept from 0° to 90° in 0.5° steps. d(δ) is the slant range at the lowest altitude of the
+  constellation (the perigee of an elliptical orbit), and `G_s` is the peak gain (assumption `pfd_peak_gain`). The
+  sweep is limited to the δ at which a satellite can be seen from some Finnish latitude. If there is none, the outcome
+  is `not_applicable`, "never visible from Finland".
+- **Notified pfd.** When the notice has a `c_pfd` row (AP4 item A.17, compliance with pfd limits) that overlaps the
+  group and the row, carries a bandwidth and is not a radio-astronomy row (`ra_stn_type` empty), it takes precedence:
+  `pfd_ref = pfd + 10·log10(min(B_ref, B_n) / min(B_cpfd, B_n))` (flat over the carrier, assumption `cpfd_flat`).
+  It carries no δ, so it is
+  compared with the limit at the lowest δ seen from Finland (assumption `cpfd_min_delta`, the strictest reading). The
+  check's `source` is then `notified`, and the calculated value is kept in its inputs; when the calculated pfd
+  exceeds the limit and the notified one does not, the check's reason says so. A `c_pfd` row without a
+  bandwidth cannot be scaled; the calculated path is used and the check says why.
+- **pfd masks.** The IFIC `.mdb` lists pfd masks (`mask_info`, `f_mask = 'P'`, frequencies in GHz) but not their
+  values. A group under such a mask carries the assumption `pfd_mask_notified_not_loaded`, and the calculated or
+  notified pfd is still compared.
+
+**Outcomes.** `exceeds` when the worst margin is above 0 dB, `meets` otherwise. `near_limit` marks a margin within
+3 dB below the limit (assumption `pfd_near_db`; pfd is deterministic, so the slack is smaller than the 6 dB of the
+review's I/N readings). `not_applicable` means no Table 21-4 row covers the group's band, service and orbit; the UI
+shows it greyed, never as compliant. `not_assessed` means a row applies but cannot be evaluated: the row is not
+encoded, the station class or the constellation size is missing, or the group has no power or gain. The evaluated groups
+of a notice that share a row are reported as one check that keeps the worst group and counts the groups and those
+exceeding; unevaluated groups are grouped the same way by row and reason, so a notice has at most one evaluated
+check per row. The notice carries `pfd_outcome` (worst check, by the outcome
+order above), `max_pfd_margin_db` and `pfd_near_limit`.
+
+The check is one notice at a time and one emission at a time: it does not add the pfd of several satellites or
+networks, which is the EPFD of Article 22 and is not covered.
 
 ## Regulatory context and the work queue
 
@@ -281,7 +360,8 @@ recorded in `data/ref/receiver_classes.json`.
 | Receiver antenna patterns | Rec. ITU-R [F.1245](https://www.itu.int/rec/R-REC-F.1245/en) / [F.699](https://www.itu.int/rec/R-REC-F.699/en), [BT.419](https://www.itu.int/rec/R-REC-BT.419/en), [RA.1631](https://www.itu.int/rec/R-REC-RA.1631/en); omnidirectional for mobile and radionavigation. |
 | Satellite antenna roll-off | Rec. ITU-R [S.672](https://www.itu.int/rec/R-REC-S.672/en). |
 | Unwanted emission masks | Rec. ITU-R [SM.1541](https://www.itu.int/rec/R-REC-SM.1541/en); [RR](https://www.itu.int/pub/R-REG-RR) Appendix 3. |
-| pfd limits (shown for context) | [RR](https://www.itu.int/pub/R-REG-RR) Article 21, Table 21-4. |
+| pfd limits on the Earth's surface (evaluated by the pfd check) | [RR](https://www.itu.int/pub/R-REG-RR) Article 21, Table 21-4 (Edition of 2024), transcribed into `data/ref/rr21_pfd_limits.json` (review pending). |
+| Space-station classes (service matching) | BR IFIC Preface, Section IV, Table 3 (edition of October 2026). |
 | Finland land boundary (generic grid) | [Natural Earth](https://www.naturalearthdata.com/) 1:50m, public domain. |
 | Regulatory context | [RR](https://www.itu.int/pub/R-REG-RR) No. 9.1, 9.6, 9.41, 9.52, 9.52C and 11.2; Resolution 49; the BR findings in the IFIC. |
 
@@ -314,7 +394,7 @@ Inputs whose change flips outcomes are listed in the result as **outcome-sensiti
 
 ## Implementation (riia-1)
 
-Code lives in `backend/src/ific/riia/`; the receiver classes, comment windows, RR Article 21 context rows and the
+Code lives in `backend/src/ific/riia/`; the receiver classes, comment windows, RR Table 21-4 pfd limits and the
 Finland boundary are in `data/ref/`. Bumping `MODEL_VERSION` (`riia/__init__.py`) changes every Monte Carlo seed, so
 every issue must be re-assessed after a bump; stored results keep the version they were made with.
 
@@ -332,7 +412,8 @@ every issue must be re-assessed after a bump; stored results keep the version th
   samples per site; if that exceeds 10⁶ samples, sites are subsampled evenly and the result says so.
 - **One beam per satellite.** Per satellite, the strongest assignment group counts (maximum, not sum); satellites in
   view are summed. A group with a notified pfd (`c_pfd`, reference bandwidth in kHz) uses it instead of the
-  calculated pfd. `mask_info` values are not loaded, so masked notices use the calculated pfd.
+  calculated pfd. The IFIC `.mdb` lists pfd masks in `mask_info` but does not contain their values, so masked
+  notices use the calculated pfd.
 - **Notice summary.** The worst outcome of a notice is taken over the co-channel and adjacent-band hazards, plus the
   earth-station terrestrial hazard of an earth-station notice within 1 000 km of Finland (an assumption). The other
   inventory modes are always listed but do not set the worst outcome, otherwise every notice would be `not_assessed`.
@@ -446,6 +527,11 @@ The letter kind is a pure function of the stored regulatory context, quoting the
    implemented and tested but never applies to 3074.
 8. **Radio astronomy adjacent-band hazards are extreme** (tens of dB over the RA.769 thresholds) because the worst
    carrier placement puts the carrier edge at the band edge, where the SM.1541 mask is 0 dB.
+9. **The Table 21-4 transcription is unreviewed** (`review.status: pending`). A test checks every encoded row
+   against a second, separately typed list, but both were typed by the implementer from the same PDF.
+10. **The pfd check is per notice and per emission.** It does not add satellites or networks (that is EPFD), and a
+    notified `c_pfd`, which has no δ, is compared with the strictest limit seen from Finland. A notified value given
+    for high δ can therefore show as `exceeds`; the calculated value is kept in the check's inputs for comparison.
 
 ## Not covered
 

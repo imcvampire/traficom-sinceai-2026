@@ -12,6 +12,7 @@ import { errorText, riskModelQuery, riskNoticeQuery } from '@/lib/queries'
 import { cn } from '@/lib/utils'
 import { HazardInventory } from './hazard-inventory'
 import { NoticeDraft } from './notice-draft'
+import { PfdChecks } from './pfd-checks'
 import { TermHint } from './term-hint'
 import { OutcomeBadge } from './outcome-badge'
 import { ChartLegend, RiskChart, type ChartCriterion, type ChartCurve, type ChartWorstCase } from './risk-chart'
@@ -226,6 +227,13 @@ function NoticeBody({ detail, outcomeSensitive }: { detail: NoticeDetail; outcom
             </p>
           )}
         </div>
+      </Section>
+
+      <Section
+        title="pfd limits (RR Art. 21, Table 21-4)"
+        description="Worst pfd on Finnish territory per Table 21-4 row. A limit on the transmitter, kept apart from the receiver hazards below."
+      >
+        <PfdChecks detail={detail} outcomeSensitive={outcomeSensitive} />
       </Section>
 
       <Section

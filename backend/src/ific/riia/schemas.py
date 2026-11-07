@@ -76,6 +76,9 @@ class NoticeSummaryOut(BaseModel):
     max_share_violating: float | None
     max_median_exceedance_db: float | None
     max_worst_case_db: float | None
+    pfd_outcome: Outcome | None = None
+    max_pfd_margin_db: float | None = None
+    pfd_near_limit: bool | None = None
     in_queue: bool
     regulatory: RegulatorySummaryOut
 
@@ -144,6 +147,29 @@ class HazardOut(BaseModel):
     assumptions: list[AssumptionOut]
 
 
+class PfdCheckOut(BaseModel):
+    check_id: str
+    grp_id: int | None
+    n_groups: int
+    n_groups_exceeding: int
+    row_id: str | None
+    band_hz: tuple[float, float] | None
+    service: str | None
+    orbit: Literal["gso", "ngso", "es"]
+    ref_bw_hz: float | None
+    source: Literal["calculated", "notified"] | None
+    pfd_dbw_m2: float | None
+    limit_dbw_m2: float | None
+    delta_deg: float | None
+    margin_db: float | None
+    outcome: Outcome
+    near_limit: bool
+    reason: str | None
+    inputs: list[InputOut]
+    citations: list[str]
+    assumptions: list[AssumptionOut]
+
+
 class GridOut(BaseModel):
     start: float
     stop: float
@@ -157,6 +183,10 @@ class NoticeDetailOut(NoticeSummaryOut):
     assessed_at: datetime
     curve_grid_db: GridOut
     hazards: list[HazardOut]
+    pfd_checks: list[PfdCheckOut] | None = None
+    pfd_check_version: str | None = None
+    pfd_limits_sha256: str | None = None
+    pfd_limits_review: str | None = None
     regulatory: RegulatoryOut
 
 
@@ -177,6 +207,9 @@ class ReceiverClassOut(BaseModel):
     gain_dbi: float
     nf_db: float
     bw_hz: float
+    acs_db: float
+    min_elev_deg: float
+    cites: dict[str, str]
     criteria: list[CriterionOut]
     distributions: list[DistributionOut]
 

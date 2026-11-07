@@ -7,6 +7,8 @@
 - `main_beam`: a directional, high-gain Finnish station (not an omnidirectional class at its class gain) whose
   half-power beam contains the GSO position notified in the IFIC ("high-gain antenna in direct line toward the
   transmitter").
+- `pfd exceeds`: the pfd on Finnish territory is above an RR Table 21-4 limit (`pfd_checks`, a regulatory
+  limit on the transmitter, kept apart from the receiver readings).
 """
 
 import csv
@@ -27,6 +29,7 @@ from ific.riia.receivers import Receiver, StationsPopulation, load_classes
 
 NEAR_LIMIT_DB = 6.0
 GROUPS = (
+    ("P", "pfd exceeds an RR Table 21-4 limit on Finnish territory"),
     ("A", "Stations source: a criterion is exceeded"),
     ("B", "Stations source: a GSO position lies in a Finnish station's main beam"),
     ("C", "Stations source: within 6 dB of a criterion (near limit)"),
@@ -147,6 +150,19 @@ def _hazard_line(h: dict[str, Any]) -> str:
     return f"{h['hazard_id']} (share {share}, p95 {'—' if p95 is None else f'{p95:+.1f} dB'})"
 
 
+def pfd_lines(detail: dict[str, Any]) -> list[str]:
+    """The Table 21-4 checks of a notice that exceed or are near the limit, worst first."""
+    picked = [c for c in detail.get("pfd_checks") or [] if c["outcome"] == "exceeds" or c["near_limit"]]
+    picked.sort(key=lambda c: -c["margin_db"])
+    return [
+        f"{c['row_id']} grp {c['grp_id']} ({c['n_groups_exceeding']}/{c['n_groups']} groups exceed): "
+        f"pfd {c['pfd_dbw_m2']:.1f} vs limit {c['limit_dbw_m2']:.1f} dB(W/m²) "
+        f"in {c['ref_bw_hz'] / 1e3:g} kHz at δ {c['delta_deg']:.1f}°, "
+        f"margin {c['margin_db']:+.1f} dB, {c['source']}"
+        for c in picked
+    ]
+
+
 def triage(
     con: duckdb.DuckDBPyConnection, ific_no: int, as_of: date
 ) -> tuple[list[dict[str, Any]], dict[str, int]]:
@@ -163,7 +179,9 @@ def triage(
         readings = notice_readings(detail, stations, lon_nom.get(ntc))
         g = generic.get(ntc)
         group = (
-            "A"
+            "P"
+            if detail.get("pfd_outcome") == "exceeds"
+            else "A"
             if readings.exceeds
             else "B"
             if readings.main_beam
@@ -197,12 +215,16 @@ def triage(
                 "generic_share": g["max_share_violating"] if g else None,
                 "br_fin": reg["fin_identified"],
                 "br_provisions": sorted({f["coord_prov"] for f in reg["findings"]}),
+                "pfd_outcome": detail.get("pfd_outcome"),
+                "max_pfd_margin_db": detail.get("max_pfd_margin_db"),
+                "pfd_rows": pfd_lines(detail),
             }
         )
     order = {k: i for i, (k, _) in enumerate(GROUPS)}
     rows.sort(
         key=lambda r: (
             order[r["group"]],
+            -(r["max_pfd_margin_db"] or 0.0) if r["group"] == "P" else 0.0,
             -(r["stations_share"] or 0.0),
             -(r["stations_max_p95_db"] if r["stations_max_p95_db"] is not None else -math.inf),
             r["ntc_id"],
@@ -231,6 +253,9 @@ def to_csv(rows: list[dict[str, Any]]) -> str:
         "generic_share",
         "br_fin",
         "br_provisions",
+        "pfd_outcome",
+        "max_pfd_margin_db",
+        "pfd_rows",
         "reviewer_verdict",
         "reviewer_note",
     ]
@@ -252,6 +277,10 @@ def to_csv(rows: list[dict[str, Any]]) -> str:
                 if r["stations_max_p95_db"] is None
                 else round(r["stations_max_p95_db"], 2),
                 "generic_share": None if r["generic_share"] is None else round(r["generic_share"], 4),
+                "max_pfd_margin_db": None
+                if r["max_pfd_margin_db"] is None
+                else round(r["max_pfd_margin_db"], 2),
+                "pfd_rows": "; ".join(r["pfd_rows"]),
                 "reviewer_verdict": "",
                 "reviewer_note": "",
             }
@@ -266,6 +295,9 @@ def report(ific_no: int, as_of: date, rows: list[dict[str, Any]], excluded: dict
         "",
         f"- `as_of` {as_of.isoformat()}. Receiver sources: `stations` (frequencies-of-interest dataset) and"
         " `generic-m4`. Readings, not a score; see `backend/src/ific/riia/review.py` for the definitions.",
+        "- pfd: worst pfd on Finnish territory against RR Article 21, Table 21-4 (Edition of 2024); the"
+        " transcription in `data/ref/rr21_pfd_limits.json` is pending review. Group P takes precedence; the"
+        " I/N readings of those notices are listed under them.",
         f"- Near-limit margin: {NEAR_LIMIT_DB:g} dB (assumption). Main beam: off-axis ≤ θ3dB/2, θ3dB ≈ 70·λ/D"
         " from the station gain (class gain when missing); pointing elevation spans the class range.",
         "- Stations excluded: "
@@ -297,6 +329,11 @@ def report(ific_no: int, as_of: date, rows: list[dict[str, Any]], excluded: dict
                 f"- Stations: worst `{r['stations_worst']}`, max share violating {share}. "
                 f"Generic: worst `{r['generic_worst']}`, max share {gshare}. {br}."
             )
+            if r["pfd_outcome"] is not None:
+                margin = "—" if r["max_pfd_margin_db"] is None else f"{r['max_pfd_margin_db']:+.1f} dB"
+                lines.append(f"- pfd vs Table 21-4: `{r['pfd_outcome']}`, max margin {margin}.")
+            for line in r["pfd_rows"][:5]:
+                lines.append(f"  - {line}")
             if r["exceeds"]:
                 lines.append("- Exceeds: " + "; ".join(r["exceeds"]) + ".")
             if r["near_limit"]:

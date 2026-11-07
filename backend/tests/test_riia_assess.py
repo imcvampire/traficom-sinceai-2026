@@ -202,3 +202,58 @@ def test_work_queue_is_exceeds_with_window_not_closed() -> None:
     ]
     ordered = sorted([no_window, open_window, last_day], key=queue_sort_key)
     assert [n["ntc_id"] for n in ordered] == [2, 1, 3]
+
+
+def test_pfd_check_on_fixture(results: list[dict]) -> None:
+    by_id = _by_id(results)
+    gso = by_id[1001]
+    assert gso["model_version"] == "riia-1" and gso["pfd_check_version"] == "art21-1"
+    c = next(c for c in gso["pfd_checks"] if c["row_id"] == "t21-4-10700-11700-fss-gso")
+    # Notified −150 dB(W/m²) in 4 kHz, compared at the lowest δ seen from Finland (≈ 11.6° from 25°E).
+    assert c["source"] == "notified" and c["pfd_dbw_m2"] == -150.0
+    assert c["limit_dbw_m2"] == pytest.approx(-150 + 0.5 * (c["delta_deg"] - 5))
+    assert gso["pfd_outcome"] == "meets" and gso["max_pfd_margin_db"] < 0
+    assert by_id[1002]["pfd_outcome"] == "exceeds"
+    assert by_id[1003]["pfd_checks"] == [] and by_id[1003]["pfd_outcome"] == "not_applicable"
+    assert by_id[1004]["pfd_checks"][0]["reason"] == "Suppressed notice"
+    assert by_id[1005]["pfd_checks"][0]["reason"] == "Never visible from Finland"
+    assert gso["worst_outcome"] == "exceeds", "the pfd check does not change the hazard outcome"
+
+
+def test_pfd_inputs_skip_radio_astronomy_rows_and_load_classes(tmp_path: Path) -> None:
+    from ific.riia.assess import _load_notices
+
+    con = loaded_db(tmp_path)
+    con.execute(
+        "INSERT INTO space.c_pfd (ific_no, ntc_id, seq_no, freq_min, freq_max, pfd, bdwdth, ra_stn_type) "
+        "VALUES (?, 1001, 2, 10700, 10950, -100, 4, 'S')",
+        [FIXTURE_ISSUE],
+    )
+    n = _load_notices(con, FIXTURE_ISSUE)[1001]
+    assert [c.pfd_dbw_m2 for c in n.pfd_notified] == [-150.0]
+    assert [(g.grp_id, g.stn_cls) for g in n.pfd_groups] == [(2001, ("EC", "EK"))]
+    assert n.pfd_groups[0].f_lo_hz == 10.7e9 and n.pfd_groups[0].gain_dbi == 30.0
+
+
+def test_pfd_sensitivity_flags_the_notified_delta() -> None:
+    from ific.riia.sensitivity import compare_pfd
+
+    base = [{"ntc_id": 1, "pfd_outcome": "exceeds", "pfd_near_limit": False, "max_pfd_margin_db": 2.0}]
+    same = {1: {"pfd_outcome": "exceeds", "pfd_near_limit": False, "max_pfd_margin_db": 2.5}}
+    flipped = {1: {"pfd_outcome": "meets", "pfd_near_limit": True, "max_pfd_margin_db": -1.0}}
+    assert compare_pfd(base, same)["flips"] == []
+    c = compare_pfd(base, flipped)
+    assert c["flips"] == [((1, "pfd"), "exceeds", "meets near")] and c["median_shift_db"] == -3.0
+    near_only = {1: {"pfd_outcome": "exceeds", "pfd_near_limit": True, "max_pfd_margin_db": 2.0}}
+    assert compare_pfd(base, near_only)["flips"] == [] and compare_pfd(base, near_only)["near_changes"] == 1
+
+
+def test_sort_key_tolerates_results_stored_before_the_pfd_check() -> None:
+    old = {
+        "ntc_id": 1,
+        "worst_outcome": "meets",
+        "max_share_violating": None,
+        "max_median_exceedance_db": None,
+    }
+    new = {**old, "ntc_id": 2, "pfd_outcome": "exceeds"}
+    assert sorted([old, new], key=technical_sort_key)[0]["ntc_id"] == 2

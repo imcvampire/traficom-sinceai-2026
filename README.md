@@ -15,9 +15,10 @@ Analyses ITU BR Space IFIC issues for their interference risk to Finnish spectru
 | uv | 0.12.22 | Installed by mise |
 | Bun | 1.4.2 | Installed by mise |
 | Node | 24.22.2 | Installed by mise |
-| mdbtools | any | Provides `mdb-export`, used to read IFIC `.mdb` files. Not managed by mise |
+| mdbtools | any | Provides `mdb-export`, used to read IFIC `.mdb` files. Not pinned by mise; `mise run install` installs it with the system package manager if it is missing |
 
-Install mdbtools with your system package manager:
+`mise run install` runs `mise run mdbtools` first, which does nothing when `mdb-export` is on `PATH` and otherwise
+uses Homebrew, `apt-get` (with `sudo`) or `dnf` (with `sudo`). To install it yourself:
 
 ```sh
 brew install mdbtools          # macOS
@@ -29,11 +30,11 @@ sudo apt install mdbtools      # Debian/Ubuntu
 ```sh
 mise trust                     # allow this repository's mise.toml
 mise install                   # Python, uv, Bun, Node
-mise run install               # uv sync (backend) + bun install (frontend)
+mise run install               # mdbtools if missing, uv sync (backend), bun install (frontend)
 cp .env.example .env           # optional; defaults work without it
 ```
 
-Without mise, install the pinned versions yourself and run the same commands:
+Without mise, install the pinned versions and mdbtools yourself and run the same commands:
 `uv sync --project backend` and `bun install --cwd frontend`.
 
 ## Run
