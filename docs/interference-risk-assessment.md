@@ -37,8 +37,9 @@ Design constraints, inherited from the challenge brief and the project brainstor
 ## Method
 
 The method is **risk-informed interference assessment**, as defined by the FCC Technological Advisory Council (TAC,
-2015) and de Vries (2015, 2017, 2018). It follows the TAC steps, and adds the aggregation step that de Vries
-describes in his 2018 presentation:
+2015) and de Vries (2015, 2017, 2018). The TAC abbreviates it as RIA; this repo spells it RIIA, hence the `riia`
+package and the model id `riia-1`. It follows the TAC steps, and adds the aggregation step that de Vries describes
+in his 2018 presentation:
 
 | Step | Source wording | What this tool does |
 |---|---|---|
