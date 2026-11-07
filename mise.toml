@@ -1,0 +1,48 @@
+[tools]
+python = "3.12"
+uv = "0.12.22"
+bun = "1.4.2"
+node = "24.22.2"
+
+[env]
+UV_PYTHON_PREFERENCE = "only-system"
+UV_PYTHON_DOWNLOADS = "never"
+
+[tasks.install]
+description = "Install backend and frontend dependencies"
+run = [
+  "uv sync --project backend",
+  "bun install --cwd frontend",
+]
+
+[tasks.api]
+description = "Run the API server with reload"
+dir = "backend"
+run = "uv run ific serve --reload"
+
+[tasks.web]
+description = "Run the Vite dev server"
+dir = "frontend"
+run = "bun run dev"
+
+[tasks.dev]
+description = "Run API and web dev servers together"
+depends = ["api", "web"]
+
+[tasks.test]
+description = "Run backend tests"
+dir = "backend"
+run = "uv run pytest -q"
+
+[tasks.lint]
+description = "Lint and format-check backend and frontend"
+run = [
+  "uv run --project backend ruff check backend",
+  "uv run --project backend ruff format --check backend",
+  "bun run --cwd frontend lint",
+]
+
+[tasks.build]
+description = "Build the frontend"
+dir = "frontend"
+run = "bun run build"

@@ -1,0 +1,268 @@
+export type Health = {
+  status: string
+  version: string
+  db: {
+    m4_edition: string
+    tables: { m4_allocation: number; m4_page: number }
+  }
+}
+
+export type RunOutcome = 'ok' | 'error' | 'skipped'
+export type FileStatus = 'new' | 'downloading' | 'downloaded' | 'failed'
+
+export type WatcherRun = {
+  started_at: string
+  finished_at: string
+  trigger: 'schedule' | 'manual' | 'cli'
+  outcome: RunOutcome
+  new_count: number
+  downloaded_count: number
+  failed_count: number
+  error: string | null
+}
+
+export type WatcherState = {
+  enabled: boolean
+  locked: boolean
+  ui_enabled: boolean | null
+  interval_seconds: number
+  running: boolean
+  source_url: string
+  last_run: WatcherRun | null
+  next_run_at: string | null
+}
+
+export type WatcherFile = {
+  ific_no: number
+  published_on: string | null
+  zip_url: string
+  status: FileStatus
+  size_bytes: number | null
+  local_path: string | null
+  error: string | null
+  attempts: number
+  discovered_at: string
+  downloaded_at: string | null
+}
+
+export class ApiError extends Error {
+  readonly status: number
+
+  constructor(status: number, message: string) {
+    super(message)
+    this.status = status
+  }
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(path, {
+    ...init,
+    headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,
+  })
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`
+    try {
+      const body = (await res.json()) as { detail?: unknown }
+      if (typeof body.detail === 'string') detail = body.detail
+    } catch {
+      // non-JSON error body; keep the status text
+    }
+    throw new ApiError(res.status, detail)
+  }
+  return (await res.json()) as T
+}
+
+export const getHealth = () => request<Health>('/api/health')
+
+export const getWatcher = () => request<WatcherState>('/api/watcher')
+
+export const setWatcherEnabled = (enabled: boolean) =>
+  request<WatcherState>('/api/watcher', { method: 'PATCH', body: JSON.stringify({ enabled }) })
+
+export const checkNow = () => request<{ accepted: boolean }>('/api/watcher/check', { method: 'POST' })
+
+export const listFiles = () => request<WatcherFile[]>('/api/watcher/files')
+
+export type Outcome = 'exceeds' | 'meets' | 'screened_out' | 'not_applicable' | 'not_assessed'
+export type HazardMode = 'cochannel' | 'adjacent' | 'es_terrestrial' | 'blocking_im' | 'aggregate_networks'
+export type OrbitType = 'gso' | 'ngso' | 'es'
+export type Stage = 'API/A' | 'CR/C' | 'Notification' | 'Res49'
+export type SourceTag = 'physics' | 'rr' | 'itu-r' | 'data' | 'assumption'
+export type JobStatus = 'idle' | 'running' | 'done' | 'failed'
+export type NoticeView = 'technical' | 'queue'
+export type ReceiverSource = 'generic-m4'
+
+export type Job = {
+  status: JobStatus
+  done: number
+  total: number
+  started_at: string | null
+  finished_at: string | null
+  error: string | null
+}
+
+export type IssueOut = {
+  ific_no: number
+  path: string
+  ingested: boolean
+  assessed: boolean
+  model_version: string | null
+  receiver_source: ReceiverSource
+  notice_count: number | null
+  outcome_counts: Record<Outcome, number> | null
+  assessed_at: string | null
+  as_of: string | null
+  job: Job
+}
+
+export type AssessAccepted = { accepted: true; job: Job }
+
+export type RegulatorySummary = {
+  stage: Stage
+  provision: string
+  d_wic: string | null
+  window_end: string | null
+  days_left: number | null
+  window_open: boolean
+  fin_identified: boolean
+}
+
+export type NoticeSummary = {
+  ntc_id: number
+  sat_name: string | null
+  adm: string
+  prov: string
+  ntc_type: 'G' | 'N' | 'S'
+  orbit: OrbitType
+  act_code: string | null
+  worst_outcome: Outcome
+  hazard_counts: Record<Outcome, number>
+  services_exceeding: string[]
+  services_assessed: string[]
+  max_share_violating: number | null
+  max_median_exceedance_db: number | null
+  max_worst_case_db: number | null
+  in_queue: boolean
+  regulatory: RegulatorySummary
+}
+
+export type NoticeListOut = {
+  ific_no: number
+  model_version: string
+  receiver_source: ReceiverSource
+  as_of: string
+  assessed_at: string
+  view: NoticeView
+  notices: NoticeSummary[]
+}
+
+export type Criterion = { metric: 'I/N' | 'spfd_margin'; level_db: number; time_pct: number; cite: string }
+
+export type Exceedance = {
+  level_db: number
+  time_pct: number
+  median_db: number | null
+  p95_db: number | null
+}
+
+export type RiskCurve = { time_pct: number; likelihood: number[] }
+
+export type HazardInput = {
+  name: string
+  value: string | number | null
+  unit: string | null
+  source: SourceTag
+  cite: string
+}
+
+export type Assumption = { id: string; text: string; sensitive: boolean }
+
+export type Hazard = {
+  hazard_id: string
+  mode: HazardMode
+  service_class: string | null
+  service_label: string | null
+  bands_hz: [number, number][]
+  tier: 0 | 1 | 2
+  outcome: Outcome
+  reason: string | null
+  n_receivers: number
+  n_samples: number
+  share_violating: number | null
+  exceedance_db: Exceedance[]
+  risk_curves: RiskCurve[]
+  worst_case_db: number | null
+  criteria: Criterion[]
+  inputs: HazardInput[]
+  citations: string[]
+  assumptions: Assumption[]
+}
+
+export type Finding = {
+  source: 'provn' | 'tr_aff_ntw'
+  coord_prov: string
+  agree_st: string | null
+  grp_id: number | null
+  aff_ntc_id: number | null
+  network: string | null
+}
+
+export type CurveGrid = { start: number; stop: number; step: number }
+
+export type NoticeDetail = NoticeSummary & {
+  model_version: string
+  receiver_source: ReceiverSource
+  as_of: string
+  assessed_at: string
+  curve_grid_db: CurveGrid
+  hazards: Hazard[]
+  regulatory: RegulatorySummary & {
+    window_cite: string | null
+    findings: Finding[]
+    citations: string[]
+  }
+}
+
+export type ReceiverClass = {
+  id: string
+  label: string
+  keywords: string[]
+  pattern: string
+  gain_dbi: number
+  nf_db: number
+  bw_hz: number
+  criteria: Criterion[]
+  distributions: { param: string; kind: string; low: number; high: number; source: 'assumption'; cite: string }[]
+}
+
+export type ModelOut = {
+  model_version: string
+  receiver_source: ReceiverSource
+  curve_grid_db: CurveGrid
+  method_steps: { step: number; source_wording: string; what: string; cite: string }[]
+  references: { title: string; url: string; supports: string }[]
+  receiver_classes: ReceiverClass[]
+  inputs: { name: string; source: SourceTag; cite: string }[]
+  outcome_sensitive: string[]
+  doc_path: 'docs/interference-risk-assessment.md'
+}
+
+const query = (params: Record<string, string | undefined>) => {
+  const search = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) if (value) search.set(key, value)
+  const text = search.toString()
+  return text ? `?${text}` : ''
+}
+
+export const listRiskIssues = () => request<IssueOut[]>('/api/risk/issues')
+
+export const assessIssue = (ificNo: number, asOf?: string) =>
+  request<AssessAccepted>(`/api/risk/issues/${ificNo}${query({ as_of: asOf })}`, { method: 'POST' })
+
+export const listRiskNotices = (ificNo: number, asOf: string, view: NoticeView) =>
+  request<NoticeListOut>(`/api/risk/issues/${ificNo}/notices${query({ as_of: asOf, view })}`)
+
+export const getRiskNotice = (ificNo: number, ntcId: number, asOf: string) =>
+  request<NoticeDetail>(`/api/risk/issues/${ificNo}/notices/${ntcId}${query({ as_of: asOf })}`)
+
+export const getRiskModel = () => request<ModelOut>('/api/risk/model')

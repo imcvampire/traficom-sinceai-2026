@@ -1,0 +1,221 @@
+{
+  "model_version": "riia-1",
+  "review": {
+    "status": "pending",
+    "note": "Transcribed for riia-1 from the cited ITU-R Recommendations by the implementer, without the primary texts open. Every level, time percentage and pattern parameter must be checked against the cited version by a person before results are relied on."
+  },
+  "noise": {
+    "kt0_dbw_hz": -203.98,
+    "cite": "physics: k·T0 with T0 = 290 K"
+  },
+  "rules": [
+    {"keywords": ["PASSIVE"], "class": null, "exclusive": true, "reason": "Passive sensors of EESS/space research are spaceborne, not Finnish ground receivers"},
+    {"keywords": ["FIXED", "SATELLITE"], "class": "fss_es", "exclusive": true, "requires_downlink": true},
+    {"keywords": ["BROADCASTING-SATELLITE"], "class": "fss_es", "exclusive": true, "requires_downlink": true},
+    {"keywords": ["MOBILE-SATELLITE"], "class": "mss_es", "exclusive": true, "requires_downlink": true},
+    {"keywords": ["METEOROLOGICAL-SATELLITE"], "class": "metsat_es", "exclusive": true, "requires_downlink": true},
+    {"keywords": ["RADIONAVIGATION-SATELLITE"], "class": "rnss", "exclusive": true, "requires_downlink": true},
+    {"keywords": ["RADIODETERMINATION"], "class": "rnss", "exclusive": true, "requires_downlink": true},
+    {"keywords": ["SATELLITE"], "class": null, "exclusive": true, "reason": "Other space services (amateur-satellite, EESS, space research, space operation, inter-satellite, standard frequency) have no ground receiver class in riia-1"},
+    {"keywords": ["RADIO ASTRONOMY"], "class": "radio_astronomy", "exclusive": false},
+    {"keywords": ["RADIONAVIGATION"], "class": "radionavigation", "exclusive": false},
+    {"keywords": ["RADIOLOCATION"], "class": "radiolocation", "exclusive": false},
+    {"keywords": ["BROADCASTING"], "class": "broadcasting", "exclusive": false},
+    {"keywords": ["FIXED"], "class": "fixed", "exclusive": false},
+    {"keywords": ["MOBILE"], "class": "mobile", "exclusive": false}
+  ],
+  "rules_cite": "M4 'Services_in_Finland': upper-case service names are primary allocations (M4 explanatory notes); only primary services are protected in riia-1",
+  "classes": [
+    {
+      "id": "fixed",
+      "label": "Fixed (point-to-point links)",
+      "metric": "I/N",
+      "pattern": {"value": "F.1245", "cite": "Rec. ITU-R F.1245-3 (average pattern for aggregate and statistical studies)"},
+      "gain_dbi": {"value": 38.0, "cite": "Rec. ITU-R F.758-7, typical point-to-point antenna gain above 3 GHz"},
+      "nf_db": {"value": 6.0, "cite": "Rec. ITU-R F.758-7, typical receiver noise figure"},
+      "bw_hz": {"value": 28000000.0, "cite": "Rec. ITU-R F.758-7, typical channel bandwidth"},
+      "acs_db": {"value": 45.0, "cite": "Rec. ITU-R F.758-7, typical receiver selectivity (assumed value)"},
+      "min_elev_deg": {"value": 0.0, "cite": "physics: line of sight above the local horizon"},
+      "criteria": [
+        {"metric": "I/N", "level_db": -10.0, "time_pct": 20.0, "cite": "Rec. ITU-R F.758-7 / F.1094: long-term I/N −10 dB, not exceeded for more than 20 % of the time"}
+      ],
+      "distributions": [
+        {"param": "azimuth_deg", "source": "assumption", "kind": "uniform", "low": 0.0, "high": 360.0, "cite": "assumption: link azimuth unknown in the generic population"},
+        {"param": "pointing_elev_deg", "source": "assumption", "kind": "uniform", "low": 0.0, "high": 5.0, "cite": "assumption: terrestrial links point near the horizon"},
+        {"param": "height_m", "source": "assumption", "kind": "uniform", "low": 10.0, "high": 60.0, "cite": "assumption: typical mast heights"}
+      ]
+    },
+    {
+      "id": "mobile",
+      "label": "Mobile (land, maritime, aeronautical)",
+      "metric": "I/N",
+      "pattern": {"value": "omni", "cite": "omnidirectional receiver (doc: 'omnidirectional for mobile')"},
+      "gain_dbi": {"value": 0.0, "cite": "omnidirectional, 0 dBi"},
+      "nf_db": {"value": 7.0, "cite": "Rec. ITU-R M.2101-0, typical user-equipment noise figure"},
+      "bw_hz": {"value": 10000000.0, "cite": "Rec. ITU-R M.2101-0, 10 MHz reference channel"},
+      "acs_db": {"value": 33.0, "cite": "3GPP TS 36.101 UE ACS (33 dB), as used with Rec. ITU-R M.2101"},
+      "min_elev_deg": {"value": 0.0, "cite": "physics: line of sight above the local horizon"},
+      "criteria": [
+        {"metric": "I/N", "level_db": -6.0, "time_pct": 20.0, "cite": "I/N −6 dB protection used in ITU-R sharing studies with IMT (e.g. Rec. ITU-R M.2101 studies); 20 % time is an assumption"}
+      ],
+      "distributions": [
+        {"param": "height_m", "source": "assumption", "kind": "uniform", "low": 1.5, "high": 30.0, "cite": "assumption: user equipment to base-station heights"}
+      ]
+    },
+    {
+      "id": "broadcasting",
+      "label": "Broadcasting reception",
+      "metric": "I/N",
+      "pattern": {"value": "BT.419", "cite": "Rec. ITU-R BT.419-3 (directivity of domestic receiving antennas)"},
+      "gain_dbi": {"value": 12.0, "cite": "GE06 planning parameters, UHF rooftop antenna gain"},
+      "nf_db": {"value": 7.0, "cite": "GE06 planning parameters, receiver noise figure"},
+      "bw_hz": {"value": 7610000.0, "cite": "GE06, DVB-T 8 MHz channel noise bandwidth"},
+      "acs_db": {"value": 30.0, "cite": "assumption: domestic receiver selectivity"},
+      "min_elev_deg": {"value": 0.0, "cite": "physics: line of sight above the local horizon"},
+      "criteria": [
+        {"metric": "I/N", "level_db": -10.0, "time_pct": 1.0, "cite": "I/N −10 dB at 1 % of time (interfering field strengths are planned at 1 % time in GE06); level is an assumption pending Rec. ITU-R BT.1895 review"}
+      ],
+      "distributions": [
+        {"param": "azimuth_deg", "source": "assumption", "kind": "uniform", "low": 0.0, "high": 360.0, "cite": "assumption: direction to the serving transmitter unknown"},
+        {"param": "pointing_elev_deg", "source": "assumption", "kind": "uniform", "low": 0.0, "high": 2.0, "cite": "assumption: rooftop antenna points at a terrestrial transmitter"},
+        {"param": "height_m", "source": "assumption", "kind": "uniform", "low": 10.0, "high": 10.0, "cite": "GE06: 10 m receiving height"}
+      ]
+    },
+    {
+      "id": "radiolocation",
+      "label": "Radiolocation (radar)",
+      "metric": "I/N",
+      "pattern": {"value": "F.1245", "cite": "assumption: Rec. ITU-R F.1245-3 shape used as a generic high-gain radar pattern"},
+      "gain_dbi": {"value": 33.0, "cite": "Rec. ITU-R M.1461-2, typical radar antenna gain"},
+      "nf_db": {"value": 5.0, "cite": "Rec. ITU-R M.1461-2, typical radar receiver noise figure"},
+      "bw_hz": {"value": 1000000.0, "cite": "Rec. ITU-R M.1461-2, typical radar IF bandwidth"},
+      "acs_db": {"value": 40.0, "cite": "assumption: radar receiver selectivity"},
+      "min_elev_deg": {"value": 0.0, "cite": "physics: line of sight above the local horizon"},
+      "criteria": [
+        {"metric": "I/N", "level_db": -6.0, "time_pct": 20.0, "cite": "Rec. ITU-R M.1461-2: I/N −6 dB radar protection criterion; 20 % time is an assumption"}
+      ],
+      "distributions": [
+        {"param": "azimuth_deg", "source": "assumption", "kind": "uniform", "low": 0.0, "high": 360.0, "cite": "assumption: scanning radar, uniform azimuth"},
+        {"param": "pointing_elev_deg", "source": "assumption", "kind": "uniform", "low": 0.0, "high": 10.0, "cite": "assumption: surveillance radar elevation coverage"},
+        {"param": "height_m", "source": "assumption", "kind": "uniform", "low": 10.0, "high": 30.0, "cite": "assumption: radar mast height"}
+      ]
+    },
+    {
+      "id": "radionavigation",
+      "label": "Radionavigation (aeronautical, maritime)",
+      "metric": "I/N",
+      "pattern": {"value": "omni", "cite": "omnidirectional receiver (doc: 'omnidirectional for ... radionavigation')"},
+      "gain_dbi": {"value": 0.0, "cite": "omnidirectional, 0 dBi"},
+      "nf_db": {"value": 5.0, "cite": "Rec. ITU-R M.1461-2, typical receiver noise figure"},
+      "bw_hz": {"value": 1000000.0, "cite": "assumption: 1 MHz reference bandwidth"},
+      "acs_db": {"value": 40.0, "cite": "assumption: receiver selectivity"},
+      "min_elev_deg": {"value": 0.0, "cite": "physics: line of sight above the local horizon"},
+      "criteria": [
+        {"metric": "I/N", "level_db": -12.0, "time_pct": 20.0, "cite": "Rec. ITU-R M.1461-2 I/N −6 dB plus a 6 dB safety-of-life margin (RR No. 4.10); 20 % time is an assumption"}
+      ],
+      "distributions": [
+        {"param": "height_m", "source": "assumption", "kind": "uniform", "low": 2.0, "high": 30.0, "cite": "assumption: ground and ship receiver heights"}
+      ]
+    },
+    {
+      "id": "radio_astronomy",
+      "label": "Radio astronomy",
+      "metric": "spfd_margin",
+      "pattern": {"value": "RA.1631", "cite": "Rec. ITU-R RA.1631-0"},
+      "gain_dbi": {"value": 60.0, "cite": "Rec. ITU-R RA.1631-0, example peak gain of a large single dish (assumed)"},
+      "nf_db": {"value": 0.0, "cite": "not used: passive service compares spectral pfd with Rec. ITU-R RA.769-2"},
+      "bw_hz": {"value": 1.0, "cite": "spectral pfd per Hz (Rec. ITU-R RA.769-2)"},
+      "acs_db": {"value": 60.0, "cite": "assumption: radio-astronomy receiver band filtering"},
+      "min_elev_deg": {"value": 0.0, "cite": "physics: line of sight above the local horizon"},
+      "criteria": [
+        {"metric": "spfd_margin", "level_db": 0.0, "time_pct": 2.0, "cite": "Rec. ITU-R RA.769-2 Table 1 continuum spfd thresholds (0 dBi side lobe) with Rec. ITU-R RA.1513-2: 2 % data loss"}
+      ],
+      "distributions": [
+        {"param": "azimuth_deg", "source": "assumption", "kind": "uniform", "low": 0.0, "high": 360.0, "cite": "assumption: telescope pointing uniform in azimuth"},
+        {"param": "pointing_elev_deg", "source": "assumption", "kind": "uniform", "low": 5.0, "high": 90.0, "cite": "assumption: telescope pointing above 5°"},
+        {"param": "height_m", "source": "assumption", "kind": "uniform", "low": 10.0, "high": 10.0, "cite": "assumption: dish height"}
+      ],
+      "spfd_threshold_dbw_m2_hz": {
+        "cite": "Rec. ITU-R RA.769-2, Table 1 (continuum observations); the band threshold is taken at the nearest listed frequency",
+        "points_mhz": [
+          [13.385, -248], [25.61, -249], [73.8, -258], [151.525, -259], [325.3, -258], [408.05, -255], [611, -253],
+          [1413.5, -255], [1665, -251], [2695, -247], [4995, -241], [10650, -240], [15375, -233], [22355, -231],
+          [23800, -228], [31550, -227], [43000, -227], [89000, -228], [150000, -223], [224000, -218], [270000, -216]
+        ]
+      }
+    },
+    {
+      "id": "fss_es",
+      "label": "FSS/BSS receiving earth station",
+      "metric": "I/N",
+      "pattern": {"value": "S.465", "cite": "Rec. ITU-R S.465-6"},
+      "gain_dbi": {"value": 45.0, "cite": "assumption: 1.2–2.4 m receive antenna in C/Ku/Ka bands"},
+      "nf_db": {"value": 1.5, "cite": "assumption: LNB noise figure (receiving system noise ≈ 120 K)"},
+      "bw_hz": {"value": 36000000.0, "cite": "assumption: 36 MHz transponder"},
+      "acs_db": {"value": 40.0, "cite": "assumption: earth-station receiver selectivity"},
+      "min_elev_deg": {"value": 0.0, "cite": "physics: line of sight above the local horizon"},
+      "criteria": [
+        {"metric": "I/N", "level_db": -12.2, "time_pct": 20.0, "cite": "RR Appendix 8: ΔT/T 6 % (I/N −12.2 dB) coordination threshold; 20 % time is an assumption"}
+      ],
+      "distributions": [
+        {"param": "azimuth_deg", "source": "assumption", "kind": "uniform", "low": 120.0, "high": 240.0, "cite": "assumption: pointing at the GSO arc seen from Finland"},
+        {"param": "pointing_elev_deg", "source": "assumption", "kind": "uniform", "low": 5.0, "high": 22.0, "cite": "assumption: GSO elevation range seen from Finland"},
+        {"param": "height_m", "source": "assumption", "kind": "uniform", "low": 5.0, "high": 15.0, "cite": "assumption: dish height"}
+      ]
+    },
+    {
+      "id": "mss_es",
+      "label": "MSS user terminal",
+      "metric": "I/N",
+      "pattern": {"value": "omni", "cite": "assumption: low-gain MSS terminal treated as omnidirectional"},
+      "gain_dbi": {"value": 3.0, "cite": "assumption: low-gain MSS terminal"},
+      "nf_db": {"value": 2.0, "cite": "assumption: MSS terminal noise figure"},
+      "bw_hz": {"value": 200000.0, "cite": "assumption: 200 kHz carrier"},
+      "acs_db": {"value": 30.0, "cite": "assumption: terminal selectivity"},
+      "min_elev_deg": {"value": 0.0, "cite": "physics: line of sight above the local horizon"},
+      "criteria": [
+        {"metric": "I/N", "level_db": -12.2, "time_pct": 20.0, "cite": "RR Appendix 8 ΔT/T 6 % (I/N −12.2 dB) applied to MSS; 20 % time is an assumption"}
+      ],
+      "distributions": [
+        {"param": "height_m", "source": "assumption", "kind": "uniform", "low": 1.5, "high": 10.0, "cite": "assumption: terminal height"}
+      ]
+    },
+    {
+      "id": "metsat_es",
+      "label": "MetSat receiving earth station",
+      "metric": "I/N",
+      "pattern": {"value": "S.465", "cite": "Rec. ITU-R S.465-6 (assumed for MetSat dishes)"},
+      "gain_dbi": {"value": 30.0, "cite": "Rec. ITU-R SA.1026-5, typical MetSat receive antenna (assumed value)"},
+      "nf_db": {"value": 2.0, "cite": "assumption: MetSat receiver noise figure"},
+      "bw_hz": {"value": 2668000.0, "cite": "assumption: HRPT-class channel bandwidth"},
+      "acs_db": {"value": 40.0, "cite": "assumption: receiver selectivity"},
+      "min_elev_deg": {"value": 5.0, "cite": "Rec. ITU-R SA.1026-5: 5° minimum operating elevation (assumed value)"},
+      "criteria": [
+        {"metric": "I/N", "level_db": -10.0, "time_pct": 20.0, "cite": "Rec. ITU-R SA.1026-5 long-term criterion (de Vries, ISART 2018: 'may not exceed ... more than 20% of the time'), expressed as I/N −10 dB"},
+        {"metric": "I/N", "level_db": 0.0, "time_pct": 0.0125, "cite": "Rec. ITU-R SA.1026-5 short-term criterion at 0.0125 % of time (de Vries, ISART 2018); level I/N 0 dB is an assumption"}
+      ],
+      "distributions": [
+        {"param": "azimuth_deg", "source": "assumption", "kind": "uniform", "low": 0.0, "high": 360.0, "cite": "assumption: tracking antenna, uniform azimuth"},
+        {"param": "pointing_elev_deg", "source": "assumption", "kind": "uniform", "low": 5.0, "high": 90.0, "cite": "assumption: tracking antenna, elevation above 5°"},
+        {"param": "height_m", "source": "assumption", "kind": "uniform", "low": 5.0, "high": 20.0, "cite": "assumption: dish height"}
+      ]
+    },
+    {
+      "id": "rnss",
+      "label": "RNSS receiver",
+      "metric": "I/N",
+      "pattern": {"value": "omni", "cite": "assumption: hemispherical GNSS antenna treated as omnidirectional"},
+      "gain_dbi": {"value": 3.0, "cite": "Rec. ITU-R M.1903, typical RNSS receive antenna peak gain (assumed value)"},
+      "nf_db": {"value": 2.0, "cite": "assumption: RNSS receiver noise figure"},
+      "bw_hz": {"value": 2000000.0, "cite": "assumption: 2 MHz RNSS receiver bandwidth"},
+      "acs_db": {"value": 30.0, "cite": "assumption: receiver selectivity"},
+      "min_elev_deg": {"value": 5.0, "cite": "assumption: 5° elevation mask"},
+      "criteria": [
+        {"metric": "I/N", "level_db": -6.0, "time_pct": 20.0, "cite": "assumption: I/N −6 dB pending review of Rec. ITU-R M.1903/M.1904 interference thresholds"}
+      ],
+      "distributions": [
+        {"param": "height_m", "source": "assumption", "kind": "uniform", "low": 1.5, "high": 10.0, "cite": "assumption: receiver height"}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+# IFIC source databases and derived data (large, re-downloadable)
+*.mdb
+*.duckdb
+*.duckdb.wal
+var/
+data/ific/
+
+# Python
+__pycache__/
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Frontend
+node_modules/
+dist/
+
+# Local secrets and OS files
+.env
+.env.*
+!.env.example
+.DS_Store

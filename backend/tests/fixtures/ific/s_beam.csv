@@ -1,0 +1,6 @@
+ntc_id,emi_rcp,beam_name,gain,bore_long,bore_lat,maj_axis,min_axis,f_steer
+1001,"E","B1",30,,,,,
+1001,"R","U1",30,,,,,
+1002,"E","N1",35,,,,,"Y"
+1004,"E","B1",30,,,,,
+1005,"E","B1",30,,,,,

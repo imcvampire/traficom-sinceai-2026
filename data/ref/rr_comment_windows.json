@@ -1,0 +1,14 @@
+{
+  "rr_edition": "Radio Regulations, Edition of 2024",
+  "cite": "RR Articles 9 and 11; Resolution 49 (Rev. WRC-23)",
+  "provisions": {
+    "9.1/IA": {"stage": "API/A", "window_months": 4, "cite": "RR No. 9.3: comments on advance publication within four months of the BR IFIC publication date"},
+    "9.1A": {"stage": "API/A", "window_months": 4, "cite": "RR No. 9.3: comments on advance publication within four months of the BR IFIC publication date"},
+    "9.6": {"stage": "CR/C", "window_months": 4, "cite": "RR No. 9.52: objections or comments on a coordination request within four months of the BR IFIC publication date; No. 9.52C: an administration that does not reply in time may be treated as not affected"},
+    "9.7": {"stage": "CR/C", "window_months": 4, "cite": "RR No. 9.52"},
+    "11.2": {"stage": "Notification", "window_months": null, "cite": "RR No. 11.2: notification for recording; examined by the BR under Article 11, no comment window"},
+    "RS49": {"stage": "Res49", "window_months": null, "cite": "Resolution 49 (Rev. WRC-23): administrative due diligence information, no comment window"}
+  },
+  "inclusion_cite": "RR No. 9.41: an administration may request inclusion in the coordination procedure within the comment window",
+  "technical_findings_prefixes": ["9.11", "9.14", "9.21", "A30A#7.1"]
+}

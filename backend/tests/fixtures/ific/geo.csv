@@ -1,0 +1,4 @@
+ntc_id,sat_name,long_nom,tol_east,tol_west
+1001,"TESTSAT-25E",25,0.1,0.1
+1004,"SUPPRESSED-30E",30,0.1,0.1
+1005,"FARSAT-100W",-100,0.1,0.1

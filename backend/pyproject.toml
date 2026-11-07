@@ -1,0 +1,42 @@
+[project]
+name = "ific"
+version = "0.1.0"
+description = "ITU BR IFIC interference analyser for Finnish spectrum use"
+authors = [
+    { name = "Quoc Anh Nguyen", email = "nguyen@qa.id.vn" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "access-parser==0.0.6",
+    "duckdb>=2.0.0",
+    "fastapi>=0.162.0",
+    "httpx2>=2.16.0",
+    "numpy>=2.5.4",
+    "pydantic-settings>=2.16.2",
+    "pypdf>=7.0.0",
+    "typer>=0.28.0",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[project.scripts]
+ific = "ific:main"
+
+[build-system]
+requires = ["uv_build>=0.12.22,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "ruff>=0.17.4",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,10 @@
+{
+  "use": "context only: shown next to hazards whose band overlaps a row; not used in any outcome",
+  "review": {"status": "pending", "note": "Transcribed by the implementer; check against RR Article 21, Table 21-4 of the cited edition"},
+  "cite": "RR Article 21, Table 21-4 (Edition of 2024)",
+  "rows": [
+    {"f_lo_mhz": 3400, "f_hi_mhz": 4200, "service": "FSS (space-to-Earth), GSO", "limit": "−152 / −152+0.5(δ−5) / −142 dB(W/m²) in 4 kHz for δ 0–5° / 5–25° / 25–90°"},
+    {"f_lo_mhz": 10700, "f_hi_mhz": 11700, "service": "FSS (space-to-Earth), GSO", "limit": "−150 / −150+0.5(δ−5) / −140 dB(W/m²) in 4 kHz for δ 0–5° / 5–25° / 25–90°"},
+    {"f_lo_mhz": 17700, "f_hi_mhz": 19700, "service": "FSS (space-to-Earth)", "limit": "−115 / −115+0.5(δ−5) / −105 dB(W/m²) in 1 MHz for δ 0–5° / 5–25° / 25–90°"}
+  ]
+}
