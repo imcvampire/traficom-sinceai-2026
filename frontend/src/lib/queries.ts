@@ -7,13 +7,16 @@ import {
   getHealth,
   getRiskModel,
   getRiskNotice,
+  getStation,
   getWatcher,
   listFiles,
   listRiskIssues,
   listRiskNotices,
+  listStations,
   setWatcherEnabled,
   type IssueOut,
   type NoticeView,
+  type StationTimePct,
   type WatcherState,
 } from '@/lib/api'
 
@@ -27,6 +30,7 @@ export const queryKeys = {
   riskIssues: ['risk', 'issues'] as const,
   riskModel: ['risk', 'model'] as const,
   riskNotices: (ificNo: number) => ['risk', 'issues', ificNo, 'notices'] as const,
+  stations: ['stations'] as const,
 }
 
 export const healthQuery = queryOptions({
@@ -72,6 +76,24 @@ export const riskNoticeQuery = (ificNo: number, ntcId: number, asOf: string, ass
   queryOptions({
     queryKey: [...queryKeys.riskNotices(ificNo), ntcId, { asOf, assessedAt }] as const,
     queryFn: () => getRiskNotice(ificNo, ntcId, asOf),
+    retry: (count, err) => !(err instanceof ApiError && err.status === 404) && count < 1,
+  })
+
+// Contours depend only on the station data and these two inputs, so results never go stale within a session.
+export const stationsQuery = (timePct: StationTimePct, threshold: number) =>
+  queryOptions({
+    queryKey: [...queryKeys.stations, { timePct, threshold }] as const,
+    queryFn: () => listStations(timePct, threshold),
+    placeholderData: keepPreviousData,
+    staleTime: Infinity,
+  })
+
+export const stationQuery = (sourceRow: number, timePct: StationTimePct, threshold: number) =>
+  queryOptions({
+    queryKey: [...queryKeys.stations, sourceRow, { timePct, threshold }] as const,
+    queryFn: () => getStation(sourceRow, timePct, threshold),
+    placeholderData: keepPreviousData,
+    staleTime: Infinity,
     retry: (count, err) => !(err instanceof ApiError && err.status === 404) && count < 1,
   })
 

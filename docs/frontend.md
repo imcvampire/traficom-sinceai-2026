@@ -14,14 +14,15 @@ to start the API as well.
 | Routing | TanStack Router, code-based | `src/router.tsx`. Table filters live in the URL search params |
 | Tables | TanStack Table v8 | `src/components/files-table.tsx` |
 | Icons, toasts | lucide-react, Sonner | |
+| Map | [MapLibre GL JS](https://maplibre.org) 6 | Used directly; OSM raster tiles from `VITE_MAP_TILE_URL`. The worker is bundled through Vite (`?worker&url`) and the `/stations` route is lazy-loaded |
 
 ## Layout
 
 - `src/lib/`: the typed API client (`api.ts`), queries and mutations, formatters, and status metadata.
 - `src/components/`: the app shell (sidebar and header), watcher controls, files table, status badge and meter, and the
   theme provider and toggle.
-- `src/pages/`: `overview.tsx` (`/`), `sources.tsx` (`/sources?status=&q=&sort=`), `risk.tsx` (`/risk`) and the 404
-  page.
+- `src/pages/`: `overview.tsx` (`/`), `sources.tsx` (`/sources?status=&q=&sort=`), `risk.tsx` (`/risk`),
+  `stations.tsx` (`/stations`) and the 404 page.
 
 ## `/risk` (interference risk)
 
@@ -45,6 +46,66 @@ Components: `risk-header.tsx` (issue picker, Assess button with 3 s job polling,
 `risk-compare.tsx`, `outcome-badge.tsx` and `risk-meta.ts`. Chart series use the `--series-1..5` tokens, so the
 status tokens stay reserved for state.
 
+## `/stations` (stations map)
+
+Every station in `ref.special_interest_station` on an OpenStreetMap basemap. It reads `/api/stations` and
+`/api/stations/{source_row}`. The backend computes the contours ([propagation](propagation.md)); the frontend only
+draws them.
+
+**What each mark means**
+
+| Mark | Meaning |
+|---|---|
+| Colour | TX-frequency bin: <30 MHz, 30–300 MHz, 300 MHz–1 GHz, 1–3 GHz, 3–10 GHz, ≥10 GHz. An ordinal one-hue ramp in the `--band-0..5` tokens, validated with the dataviz ramp checks in both themes |
+| Disc | Radius where the ITU-R P.1546-6 field strength falls to the threshold: 50% locations, receiver 10 m, rural, land path, flat terrain (`h1` = antenna AGL), omnidirectional at maximum e.r.p. The threshold is the T/R 25-08 trigger in 29.7–470 MHz and the slider value elsewhere. Solid outline: radius solved in 1–1000 km. Dashed: below 1 km (drawn at 1 km) or 1000 km and more |
+| No disc | 429 stations: 328 without power, 98 outside 30–4000 MHz, 3 without TX frequency. The sheet gives the reason. A missing or >3000 m antenna height also gives no disc, and a station without a position is left off the map |
+| Arrow | Azimuth of a directional station, `min(radius, 20 km)` long (5 km without a disc) |
+| Column (3D) | Antenna height above ground × exaggeration, on a 2 km hexagon so it shows from zoom 6. Tooltips give real metres |
+
+Layers from bottom to top: `osm` raster (dimmed in dark mode), `contour-fill` at 4% opacity with its outlines,
+`azimuth`, `site`, `site-selected`, and `mast`. The masts are on top so that in 3D they stand in front of the flat
+dots.
+
+**URL params.** Invalid values are dropped.
+
+| Param | Values |
+|---|---|
+| `band` | Comma-separated bins `0`–`5` (deduplicated), or `none`; absent means all. Stations without a TX frequency are never hidden by the band filter |
+| `q` | Digits of a station number |
+| `station` | `source_row`; opens the detail sheet |
+| `view` | `2d` (default) or `3d` (55° pitch, columns) |
+| `t` | Time percentage `1`, `10` (default) or `50` |
+| `thr` | Threshold −20 to 120 dBµV/m, default 30, used where T/R 25-08 does not apply. The slider is debounced by 300 ms |
+| `contours` | `off` hides the discs |
+| `ex` | Column exaggeration 1–50, default 20 |
+
+**Interaction**
+- Hovering a station shows a tooltip and highlights its disc: a 25% fill with a 2.5 px outline in the foreground ink, so it stands out from the blue band outlines. The highlight shows even when contours are switched off.
+- Clicking a station opens its sheet.
+- A click that hits several stations within 6 px opens a picker.
+
+The sheet shows:
+- parameters with units;
+- the contour inputs, threshold, citation and assumptions;
+- the P.1546 intermediates at the radius;
+- M4 overlaps;
+- quality flags;
+- the spreadsheet row and raw columns.
+
+**States**
+- API error: an alert with a retry button.
+- WebGL missing: an alert.
+- Tile errors: a small notice, while stations still render.
+
+Components: `station-map.tsx` (MapLibre, created once, updated from props), `station-legend.tsx`,
+`station-sheet.tsx`, `station-meta.ts` (bins, labels, formatters, search type) and `src/lib/geo.ts` (spherical
+circle, arrow and hexagon geometry).
+
+**Basemap.** `VITE_MAP_TILE_URL` is a raster XYZ URL read at build time. Its default is
+`https://tile.openstreetmap.org/{z}/{x}/{y}.png`. The OSM tile usage policy allows light use with the
+"© OpenStreetMap contributors" attribution, which the map shows. Point the variable at another tile server for
+heavier use.
+
 ## Conventions
 
 - **Theme tokens.** Colors are CSS variables in `src/index.css`.
@@ -59,4 +120,6 @@ status tokens stay reserved for state.
 - **Theme.** `src/components/theme-provider.tsx` handles light, dark and system themes. `index.html` applies the saved
   theme before first paint. `next-themes` is deliberately not used: its inline script triggers a React 19 error in a
   client-only app.
+- **MapLibre CSS.** `maplibre-gl.css` is unlayered, so it beats Tailwind utilities on the same element (for example,
+  `.maplibregl-map` forces `position: relative`). Put layout classes on a wrapper, not on the map container.
 - **Lint.** `oxlint` ignores the generated `src/components/ui/**` files (see `.oxlintrc.json`).

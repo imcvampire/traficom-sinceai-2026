@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link, Outlet, useRouterState } from '@tanstack/react-router'
-import { LayoutDashboard, Radar, Satellite, ShieldAlert } from 'lucide-react'
+import { LayoutDashboard, MapPin, Radar, Satellite, ShieldAlert } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 import {
   Sidebar,
@@ -26,12 +26,14 @@ const NAV = [
   { to: '/', label: 'Overview', icon: LayoutDashboard },
   { to: '/sources', label: 'Space IFIC sources', icon: Satellite },
   { to: '/risk', label: 'Interference risk', icon: ShieldAlert },
+  { to: '/stations', label: 'Stations map', icon: MapPin },
 ] as const
 
 const PAGE_TITLES: Record<string, string> = {
   '/': 'Overview',
   '/sources': 'Space IFIC sources',
   '/risk': 'Interference risk',
+  '/stations': 'Stations map',
 }
 
 function ApiStatus() {

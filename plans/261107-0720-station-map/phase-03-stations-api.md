@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: Stations API with contours
-status: pending
+status: completed
 depends_on: [1, 2]
 ---
 
@@ -36,7 +36,7 @@ def contour(
   - path `[("land", d)]`, with the assumption `path_assumed_land`;
   - `rx_env = "rural"`.
   - Directional stations add `omni_worst_case`.
-- **Solve:** bisection on d over [1, 1000] km, to a tolerance of 0.01 km.
+- **Solve:** bisection on d over [1, 1000] km, in log-distance to 1e-7 (0.01 km was too coarse for the 0.05 dB check near 1 km).
   - If `E(1 km) < threshold`, the result is `bound = "below_1km"` and `radius_km = 1`.
   - If `E(1000 km) ≥ threshold`, the result is `bound = "at_least_1000km"`.
 - **Contour fields:** `radius_km`, `bound`, `threshold_dbuv`, `threshold_source`, `threshold_citation`,

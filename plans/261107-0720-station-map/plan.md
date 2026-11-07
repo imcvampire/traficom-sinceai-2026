@@ -1,7 +1,7 @@
 ---
 title: Map page for special-interest stations, with P.1546 contours
 description: A /stations map whose station radius is an ITU-R P.1546 field-strength contour. The propagation engine and T/R 25-08 trigger lookup are shared with the terrestrial side quest.
-status: pending
+status: completed
 mode: hard
 priority: P1
 effort: 2d
@@ -37,7 +37,7 @@ calling the same code with the transmitter and receiver swapped.
 |---|---|
 | `ref.special_interest_station` | 873 rows, all inside the Finland bounding box. 772 have a TX frequency within P.1546's range of 30–4000 MHz, and 444 of those have a radiated power. The other 328 in range have no power: all 320 FX fixed links and 8 MUUT. The other 98 are out of range: 9 MF/HF broadcast stations below 30 MHz, and 89 MUUT/MVV stations above 4 GHz. 3 stations have no TX frequency. Power type is `E` (ERP) wherever given. `effective_agl_m` is 1–317 m. 237 stations are directional (`D`), 188 of them with an azimuth. |
 | ITU-R P.1546 reference code | [eeveetza/p1546](https://github.com/eeveetza/p1546) is a MATLAB/Octave implementation that its README says matches the reference version approved by ITU-R WP 3K. It includes `validateP1546.m`. The [ITU software copyright page](https://www.itu.int/en/ITU-R/study-groups/software-copyright-statements/Pages/default.aspx) lists the P.1546 script under OFCOM (Switzerland). No maintained Python port was found. Octave is not installed. |
-| T/R 25-08 | The current edition covers land mobile 29.7–470 MHz (amended 6 June 2025, [ECC docdb](https://docdb.cept.org/document/category/ECC_Recommendations/review)). Its triggers are defined at 50% locations, 10% time and a 10 m receiving height, at the border line, per 25 kHz, with `+6·log10(bw/25 kHz)` for wideband. The 2008 table found online is superseded and must not be used. |
+| T/R 25-08 | The current edition covers land mobile 29.7–470 MHz (amended 6 June 2025, [ECC docdb](https://docdb.cept.org/document/category/ECC_Recommendations/review)). Its triggers are defined at 50% locations, 10% time and a 10 m receiving height, at the border line, per 25 kHz, with `+10·log10(channel spacing/25 kHz)` for wideband (A1.2.3, verified in the PDF on 2026-11-07; an earlier draft said `6·log10`). The 2008 table found online is superseded and must not be used. |
 | Backend | `numpy` is already a dependency, added by the scoring work. The scoring plan (`plans/261106-2255-sat-severity-scoring/plan.md`, extension trace) names "P.1546 field strength against T/R 25-08" as its terrestrial follow-up and has not built it. |
 | `frontend/` | React 19, Vite, TanStack Router and Query, shadcn/ui, Tailwind v4 tokens. No map library yet. |
 
@@ -56,7 +56,7 @@ calling the same code with the transmitter and receiver swapped.
 | Stations without a contour | No disc. The sheet gives the reason: `no_power` (328), `outside_p1546_range` (98) or `missing_tx_frequency` (3). | No invented ERP. A horizon disc as a fallback would mean something different from the other discs. | A typical ERP per class: an invented input. |
 | Directional antennas | A circle at the maximum ERP (worst case, since P.1546 has no antenna pattern), plus an azimuth arrow. Flagged `omni_worst_case`. **No beamwidth is derived or assumed.** | The data has no antenna patterns. A wedge would need a beamwidth for the 49 directional stations without gain, and an off-axis pattern for all 237 (ITU-R F.699/F.1245). The worst-case circle is safe for protection. | A beamwidth wedge with a 30° default: an invented number that judges would question. |
 | Map library and basemap | `maplibre-gl` used directly, over OSM raster tiles with attribution. The tile URL comes from `VITE_MAP_TILE_URL`. In dark mode the raster paint is dimmed. | Free with no API key, and `fill-extrusion` supports height. | Leaflet: it has no 3D extrusion. |
-| Height | `fill-extrusion` of a hexagon of about 400 m, height `effective_agl_m × exaggeration` (1–50×, default 20×), in 3D view at a 55° pitch | A real-scale mast is invisible at country zoom. Tooltips show real metres. | |
+| Height | `fill-extrusion` of a 2 km hexagon (400 m was sub-pixel at country zoom), height `effective_agl_m × exaggeration` (1–50×, default 20×), in 3D view at a 55° pitch | A real-scale mast is invisible at country zoom. Tooltips show real metres. | |
 | Colour | Six ordered TX-frequency bins with a sequential palette from the `dataviz` skill | The data spans 1.5 MHz–27.5 GHz. | Licence class: it has no meaning, per Traficom. |
 | Where calculations live | Backend: P.1546, the T/R 25-08 lookup, radius, band bin and flags. Frontend: polygon vertices only. | One auditable implementation, shared with the side quest. | |
 | API placement | New `ific/propagation/` package (`p1546.py`, `tr2508.py`) and a `ific/stations.py` router, mounted with one `include_router` line in the shared `api.py` | This keeps edits to `api.py` minimal while the scoring agent works in it. | |
@@ -82,11 +82,11 @@ uses land paths only. No side-quest code is built here.
 
 | # | Phase | Status | Depends on |
 |---|---|---|---|
-| 01 | [P.1546 engine](phase-01-p1546-engine.md) | pending | — |
-| 02 | [T/R 25-08 trigger table](phase-02-tr2508-triggers.md) | pending | — |
-| 03 | [Stations API with contours](phase-03-stations-api.md) | pending | 01, 02 |
-| 04 | [Map page](phase-04-map-page.md) | pending | 03 |
-| 05 | [Docs and verification](phase-05-docs-and-verify.md) | pending | 04 |
+| 01 | [P.1546 engine](phase-01-p1546-engine.md) | completed | — |
+| 02 | [T/R 25-08 trigger table](phase-02-tr2508-triggers.md) | completed | — |
+| 03 | [Stations API with contours](phase-03-stations-api.md) | completed | 01, 02 |
+| 04 | [Map page](phase-04-map-page.md) | completed | 03 |
+| 05 | [Docs and verification](phase-05-docs-and-verify.md) | completed | 04 |
 
 Phases 01 and 02 own disjoint files and can run in parallel.
 
@@ -118,6 +118,26 @@ Phases 01 and 02 own disjoint files and can run in parallel.
    10 m, land path, flat terrain") and where the threshold comes from.
 9. **Checks pass.** `mise run lint`, the backend tests for these phases and `bun run build` pass. Screenshots in
    2D and 3D are in the phase 05 report.
+
+## Outcome (2026-11-07)
+
+All phases are done. The evidence is in [the tester report](../reports/tester-261107-0738-station-map.md) and
+the docs are in [docs/propagation.md](../../docs/propagation.md). These deviations were driven by evidence:
+
+- **Wideband correction.** It is `10·log10`, per the 2025 PDF, not `6·log10`.
+- **Engine inputs.** The engine also accepts the optional terrain inputs (TCA, tropospheric scatter, slope,
+  transmitter clutter). So none of the 52 reference cases is skipped, and the tolerance is 0.001 dB instead of
+  0.1 dB.
+- **Radius cache.** Radii are cached per physical input (`f`, `t`, `h1`, e.r.p., threshold) instead of per
+  `(sha, t, threshold)`, so a data reload cannot serve stale values.
+- **Bisection.** It runs in log-distance to 1e-7, not to 0.01 km. At 0.01 km, the 0.05 dB consistency criterion
+  would fail near 1 km.
+- **Disc fill.** It is 4% opacity, not 12%, because 444 overlapping discs hid the basemap.
+- **Columns.** They have a 2 km footprint and draw above the site dots.
+- **Extra URL params.** `contours=off` and `ex` are in the URL, so all state is.
+
+Open item: a person must check the T/R 25-08 values against the PDF and replace the `UNVERIFIED` note in
+`tr2508.py`.
 
 ## Risks
 

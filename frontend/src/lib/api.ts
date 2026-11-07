@@ -266,3 +266,104 @@ export const getRiskNotice = (ificNo: number, ntcId: number, asOf: string) =>
   request<NoticeDetail>(`/api/risk/issues/${ificNo}/notices/${ntcId}${query({ as_of: asOf })}`)
 
 export const getRiskModel = () => request<ModelOut>('/api/risk/model')
+
+export type ContourBound = 'exact' | 'below_1km' | 'at_least_1000km'
+export type NoContourReason =
+  | 'missing_tx_frequency'
+  | 'outside_p1546_range'
+  | 'no_power'
+  | 'unsupported_power_type'
+  | 'missing_antenna_height'
+  | 'antenna_height_out_of_range'
+export type StationTimePct = 1 | 10 | 50
+
+export type Contour = {
+  radius_km: number
+  bound: ContourBound
+  threshold_dbuv: number
+  threshold_source: 'tr2508' | 'user'
+  threshold_citation: string | null
+  threshold_note: string | null
+  time_pct: number
+  loc_pct: number
+  h1_m: number
+  h2_m: number
+  erp_dbw: number
+  f_mhz: number
+  assumptions: string[]
+}
+
+export type StationProps = {
+  source_row: number
+  station_no: number
+  licence_class: string | null
+  tx_hz: number | null
+  rx_hz: number | null
+  bandwidth_hz: number | null
+  effective_agl_m: number | null
+  effective_asl_m: number | null
+  ground_height_m: number | null
+  azimuth_deg: number | null
+  directivity: string | null
+  ant_gain_db: number | null
+  polarisation: string | null
+  emission_class: string | null
+  radiated_power_dbw: number | null
+  band_bin: number | null
+  m4_services: string[]
+  quality_flags: string[]
+  contour: Contour | null
+  no_contour_reason: NoContourReason | null
+}
+
+export type StationFeature = {
+  type: 'Feature'
+  id: number
+  geometry: { type: 'Point'; coordinates: [number, number] }
+  properties: StationProps
+}
+
+export type StationModel = {
+  p1546_version: string
+  p1546_reference: string
+  tr2508_citation: string
+  tr2508_range_mhz: [number, number]
+  time_pct: number
+  loc_pct: number
+  h2_m: number
+  rx_env: string
+  path: string
+  terrain: string
+  antenna: string
+  user_threshold_dbuv: number
+  radius_range_km: [number, number]
+}
+
+export type StationCollection = { type: 'FeatureCollection'; model: StationModel; features: StationFeature[] }
+
+export type StationOverlap = {
+  side: 'tx' | 'rx'
+  m4_id: number
+  overlap_lower_hz: number
+  overlap_upper_hz: number
+  services_in_finland: string | null
+  sub_band_usage: string | null
+  class_of_station: string | null
+  direction: string | null
+}
+
+export type StationDetail = StationFeature & {
+  raw: Record<string, string | number | null>
+  m4_overlaps: StationOverlap[]
+  p1546_steps: Record<string, number> | null
+  model: StationModel
+}
+
+const stationParams = (timePct: StationTimePct, threshold: number) =>
+  query({ time_pct: String(timePct), threshold_dbuv: String(threshold) })
+
+export const listStations = (timePct: StationTimePct, threshold: number) =>
+  request<StationCollection>(`/api/stations${stationParams(timePct, threshold)}`)
+
+export const getStation = (sourceRow: number, timePct: StationTimePct, threshold: number) =>
+  request<StationDetail>(`/api/stations/${sourceRow}${stationParams(timePct, threshold)}`)

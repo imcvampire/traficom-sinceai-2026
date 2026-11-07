@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: Docs and verification
-status: pending
+status: completed
 depends_on: [4]
 ---
 

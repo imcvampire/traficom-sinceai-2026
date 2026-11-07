@@ -1,5 +1,6 @@
-import { createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
+import { createRootRoute, createRoute, createRouter, lazyRouteComponent } from '@tanstack/react-router'
 import { AppShell } from '@/components/app-shell'
+import { THRESHOLD_RANGE, type StationsSearch } from '@/components/station-meta'
 import type { FilesTableView } from '@/components/files-table'
 import { RISK_SORT_RE } from '@/components/risk-table'
 import type { FileStatus, OrbitType, Outcome } from '@/lib/api'
@@ -14,6 +15,8 @@ const SORT_RE = /^(ific_no|published_on|status|size_bytes|downloaded_at)\.(asc|d
 const OUTCOMES: readonly Outcome[] = ['exceeds', 'meets', 'screened_out', 'not_applicable', 'not_assessed']
 const ORBITS: readonly OrbitType[] = ['gso', 'ngso', 'es']
 const COMPARE_RE = /^\d+(,\d+)*$/
+const BAND_RE = /^[0-5](,[0-5])*$/
+const TIME_PCTS = [1, 10, 50] as const
 const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/
 
 // Search values arrive JSON-parsed, so a numeric-looking string may already be a number.
@@ -72,8 +75,35 @@ const riskRoute = createRoute({
   },
 })
 
+function asInt(value: unknown, min: number, max: number): number | undefined {
+  const n = typeof value === 'number' ? value : typeof value === 'string' && /^-?\d+$/.test(value) ? Number(value) : NaN
+  return Number.isInteger(n) && n >= min && n <= max ? n : undefined
+}
+
+const stationsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/stations',
+  // MapLibre is large, so the map page loads on first visit.
+  component: lazyRouteComponent(() => import('@/pages/stations'), 'StationsPage'),
+  validateSearch: (search: Record<string, unknown>): StationsSearch => {
+    const band = asText(search.band)
+    const q = asText(search.q)
+    const t = asInt(search.t, 1, 50)
+    return {
+      band: band === 'none' ? band : band && BAND_RE.test(band) ? [...new Set(band.split(','))].sort().join(',') : undefined,
+      q: q && /^\d+$/.test(q) ? q : undefined,
+      station: asId(search.station),
+      view: search.view === '3d' || search.view === '2d' ? search.view : undefined,
+      t: TIME_PCTS.find((v) => v === t),
+      thr: asInt(search.thr, THRESHOLD_RANGE[0], THRESHOLD_RANGE[1]),
+      contours: search.contours === 'off' ? 'off' : undefined,
+      ex: asInt(search.ex, 1, 50),
+    }
+  },
+})
+
 export const router = createRouter({
-  routeTree: rootRoute.addChildren([overviewRoute, sourcesRoute, riskRoute]),
+  routeTree: rootRoute.addChildren([overviewRoute, sourcesRoute, riskRoute, stationsRoute]),
   defaultPreload: 'intent',
   scrollRestoration: true,
 })

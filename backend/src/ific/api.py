@@ -10,7 +10,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from ific import __version__, db, ingest, m4, special_interest
+from ific import __version__, db, ingest, m4, special_interest, stations
 from ific.config import PROJECT_ROOT, settings
 from ific.riia import MODEL_VERSION, method
 from ific.riia import store as risk_store
@@ -55,6 +55,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(stations.router)
 
 
 def get_db(request: Request) -> Iterator[duckdb.DuckDBPyConnection]:

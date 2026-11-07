@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: T/R 25-08 trigger table
-status: pending
+status: completed
 depends_on: []
 ---
 
@@ -11,7 +11,7 @@ depends_on: []
 
 T/R 25-08 is the ECC recommendation for coordinating land mobile systems, 29.7–470 MHz in the current edition.
 Its triggers are field strengths at the border line: 50% locations, 10% time, 10 m receiving height, per 25 kHz.
-For wider channels, `6·log10(bw / 25 kHz)` dB is added. The 2008 table circulating online is superseded and must
+For channel spacing above 25 kHz, `10·log10(spacing / 25 kHz)` dB is added (A1.2.3, page 7 of the 2025 edition). The 2008 table circulating online is superseded and must
 not be used.
 
 ## Steps
@@ -46,7 +46,7 @@ not be used.
 | File | Action |
 |---|---|
 | `backend/src/ific/propagation/tr2508.py` | **New.** |
-| `backend/tests/test_tr2508.py` | **New.** Band edges, out-of-range `None`, the wideband correction (e.g. 200 kHz gives `+6·log10(8)`, about 5.42 dB), and no correction at 25 kHz or below. |
+| `backend/tests/test_tr2508.py` | **New.** Band edges, out-of-range `None`, the wideband correction (e.g. 200 kHz gives `+10·log10(8)`, about 9.03 dB), and no correction at 25 kHz or below. |
 
 ## Validation
 

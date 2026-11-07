@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: Map page
-status: pending
+status: completed
 depends_on: [3]
 ---
 
@@ -39,7 +39,7 @@ Load the `dataviz` skill before choosing the band palette and building the legen
 
 1. **`osm` raster.** In dark mode set `raster-brightness-max: 0.55` and `raster-saturation: -0.6`. Attribution:
    © OpenStreetMap contributors.
-2. **`contour` fill and outline.** Built from `contour.radius_km` with fill opacity 0.12 and a 1 px band-colour
+2. **`contour` fill and outline.** Built from `contour.radius_km` with fill opacity 0.04 (0.12 hid the basemap under 444 overlapping discs) and a 1 px band-colour
    outline. `below_1km` contours are drawn as a 1 km disc with a dashed outline. `at_least_1000km` contours are
    clipped at 1000 km with a dashed outline. A toggle shows or hides the layer.
 3. **`azimuth` line** for directional stations with an azimuth, 1.5 px, with length `min(radius_km, 20 km)`.
