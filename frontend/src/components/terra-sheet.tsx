@@ -334,11 +334,6 @@ function Regulatory({ a }: { a: TerraAssignment }) {
       {a.criterion && (
         <p className="text-xs text-muted-foreground">
           {a.criterion.title} · {a.criterion.citation}
-          {!a.criterion.verified && (
-            <Badge variant="outline" className="ml-2 text-[10px]" title={TERMS.unverified}>
-              unverified
-            </Badge>
-          )}
         </p>
       )}
       <div>

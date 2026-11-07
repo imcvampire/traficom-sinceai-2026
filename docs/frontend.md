@@ -110,7 +110,7 @@ own). Lists are comma-separated.
 
 **Header.** Issue picker, assessment state, and an Assess / Re-assess button (`POST /api/terrestrial/issues/{n}`,
 then `GET /issues` is polled every 3 s while the job runs; a 409 shows "already being assessed"). It lists the model
-and P.1546 versions and the criteria from `/model`, each with an "unverified" badge until its transcription is
+and P.1546 versions and the criteria from `/model`, with a "verified" badge once a transcription has been
 checked. The summary card counts every assignment of the issue by outcome; clicking an outcome toggles the `outcome`
 filter. The draft-letters card lists the administrations `/drafts` returns.
 

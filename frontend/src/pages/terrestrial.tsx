@@ -200,13 +200,9 @@ function Header({ issues, issue, onIssueChange }: { issues: TerraIssueOut[]; iss
                   <span className="text-muted-foreground tabular-nums">
                     {c.f_min_mhz}–{c.f_max_mhz} MHz
                   </span>
-                  {c.verified ? (
+                  {c.verified && (
                     <Badge variant="secondary" className="text-[10px]">
                       verified{c.verified_by ? ` by ${c.verified_by}` : ''}
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline" className="text-[10px]" title={TERMS.unverified}>
-                      unverified
                     </Badge>
                   )}
                 </li>

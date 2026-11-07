@@ -136,7 +136,6 @@ export const TERMS = {
     'The field strength (dBµV/m) at the Finnish border above which the criterion calls for coordination, corrected for bandwidth.',
   indicative:
     'The criterion is a CEPT/ECC recommendation the administration is not bound by (for example RUS, with CEPT membership suspended). The result is indicative; the bilateral agreement governs.',
-  unverified: 'The criterion transcription in data/ref/terrestrial_criteria.json has not been checked against the source document yet.',
   finCoord: 'Coordination records of the notice that name FIN: the provision and its status.',
   distance: 'Great-circle distance from the site to the nearest sampled Finnish border or coast point.',
   relevant:

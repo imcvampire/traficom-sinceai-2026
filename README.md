@@ -145,6 +145,8 @@ Run a single test file with `cd backend && uv run pytest tests/test_m4.py -q`.
 
 ## Documentation
 
+- [docs/solution-overview.md](docs/solution-overview.md): standalone overview of the inputs, processing and outputs,
+  written to go with the IFIC 3074 / 3076 submission.
 - [docs/interference-risk-assessment.md](docs/interference-risk-assessment.md): the assessment method, its sources,
   and what is still unvalidated.
 - [docs/terrestrial-land-mobile.md](docs/terrestrial-land-mobile.md): the terrestrial land mobile method (`terra-1`).
