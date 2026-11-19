@@ -5,6 +5,9 @@ Analyses ITU BR Space IFIC issues for their interference risk to Finnish spectru
 - `backend/`: a Python 3.12 FastAPI service and `ific` CLI. It ingests IFIC `.mdb` databases into DuckDB, runs
   the risk-informed interference assessment (model `riia-1`), and watches the ITU site for new issues.
 - `frontend/`: a React 19 + Vite single-page app that talks to the API through the `/api` proxy.
+  
+## Pitch 
+https://youtu.be/iYiJc3rVlDg?si=bZoF0so-yiRory4v 
 
 ## Prerequisites
 
